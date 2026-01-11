@@ -125,39 +125,60 @@ export type Database = {
       service_requests: {
         Row: {
           admin_response: string | null
+          budget_range: string | null
+          color_theme: string | null
+          company_name: string | null
+          contact_email: string | null
+          contact_phone: string | null
           created_at: string
           description: string | null
           id: string
           notes: string | null
           priority: string | null
           service_id: string | null
+          service_type: string | null
           status: Database["public"]["Enums"]["request_status"]
+          timeline: string | null
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
           admin_response?: string | null
+          budget_range?: string | null
+          color_theme?: string | null
+          company_name?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           description?: string | null
           id?: string
           notes?: string | null
           priority?: string | null
           service_id?: string | null
+          service_type?: string | null
           status?: Database["public"]["Enums"]["request_status"]
+          timeline?: string | null
           title: string
           updated_at?: string
           user_id: string
         }
         Update: {
           admin_response?: string | null
+          budget_range?: string | null
+          color_theme?: string | null
+          company_name?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           description?: string | null
           id?: string
           notes?: string | null
           priority?: string | null
           service_id?: string | null
+          service_type?: string | null
           status?: Database["public"]["Enums"]["request_status"]
+          timeline?: string | null
           title?: string
           updated_at?: string
           user_id?: string
@@ -204,6 +225,42 @@ export type Database = {
           is_active?: boolean | null
           price_range?: string | null
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      team_members: {
+        Row: {
+          bio: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          name: string
+          order_index: number
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name: string
+          order_index?: number
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name?: string
+          order_index?: number
+          role?: string
           updated_at?: string
         }
         Relationships: []
