@@ -1,0 +1,573 @@
+import { useEffect, useState } from 'react';
+import { Navigate, Link } from 'react-router-dom';
+import { 
+  LayoutDashboard, FileText, Briefcase, Image, Mail, Users, LogOut, 
+  Plus, Edit, Trash2, Eye, Check, X, Loader2, MessageSquare
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Service {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  features: string[];
+  price_range: string;
+  is_active: boolean;
+}
+
+interface ServiceRequest {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  admin_response: string | null;
+  created_at: string;
+  user_id: string;
+  profiles?: { full_name: string; email: string };
+}
+
+interface PortfolioItem {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  project_url: string;
+  technologies: string[];
+  category: string;
+  is_featured: boolean;
+}
+
+interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+  is_read: boolean;
+  is_replied: boolean;
+  created_at: string;
+}
+
+const AdminDashboard = () => {
+  const { isAdminAuthenticated, adminLogout } = useAdminAuth();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  // Data states
+  const [services, setServices] = useState<Service[]>([]);
+  const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
+
+  // Dialog states
+  const [serviceDialog, setServiceDialog] = useState(false);
+  const [portfolioDialog, setPortfolioDialog] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingPortfolio, setEditingPortfolio] = useState<PortfolioItem | null>(null);
+
+  // Form states
+  const [serviceForm, setServiceForm] = useState({
+    title: '', description: '', icon: 'Code', features: '', price_range: '', is_active: true
+  });
+  const [portfolioForm, setPortfolioForm] = useState({
+    title: '', description: '', image_url: '', project_url: '', technologies: '', category: '', is_featured: false
+  });
+
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      fetchAllData();
+      subscribeToChanges();
+    }
+  }, [isAdminAuthenticated]);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    await Promise.all([
+      fetchServices(),
+      fetchRequests(),
+      fetchPortfolio(),
+      fetchMessages(),
+    ]);
+    setLoading(false);
+  };
+
+  const fetchServices = async () => {
+    const { data } = await supabase.from('services').select('*').order('created_at', { ascending: false });
+    if (data) setServices(data.map(s => ({ ...s, features: s.features || [] })));
+  };
+
+  const fetchRequests = async () => {
+    const { data } = await supabase
+      .from('service_requests')
+      .select('*, profiles(full_name, email)')
+      .order('created_at', { ascending: false });
+    if (data) setRequests(data as any);
+  };
+
+  const fetchPortfolio = async () => {
+    const { data } = await supabase.from('portfolio_items').select('*').order('created_at', { ascending: false });
+    if (data) setPortfolio(data.map(p => ({ ...p, technologies: p.technologies || [] })));
+  };
+
+  const fetchMessages = async () => {
+    const { data } = await supabase.from('contact_messages').select('*').order('created_at', { ascending: false });
+    if (data) setMessages(data);
+  };
+
+  const subscribeToChanges = () => {
+    const channel = supabase
+      .channel('admin-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, fetchRequests)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_messages' }, fetchMessages)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  };
+
+  // Service CRUD
+  const handleSaveService = async () => {
+    const features = serviceForm.features.split(',').map(f => f.trim()).filter(Boolean);
+    const payload = { ...serviceForm, features };
+
+    if (editingService) {
+      const { error } = await supabase.from('services').update(payload).eq('id', editingService.id);
+      if (!error) toast({ title: 'Service updated successfully' });
+    } else {
+      const { error } = await supabase.from('services').insert([payload]);
+      if (!error) toast({ title: 'Service created successfully' });
+    }
+
+    setServiceDialog(false);
+    setEditingService(null);
+    setServiceForm({ title: '', description: '', icon: 'Code', features: '', price_range: '', is_active: true });
+    fetchServices();
+  };
+
+  const handleDeleteService = async (id: string) => {
+    const { error } = await supabase.from('services').delete().eq('id', id);
+    if (!error) {
+      toast({ title: 'Service deleted' });
+      fetchServices();
+    }
+  };
+
+  const editService = (service: Service) => {
+    setEditingService(service);
+    setServiceForm({
+      title: service.title,
+      description: service.description || '',
+      icon: service.icon || 'Code',
+      features: service.features.join(', '),
+      price_range: service.price_range || '',
+      is_active: service.is_active,
+    });
+    setServiceDialog(true);
+  };
+
+  // Portfolio CRUD
+  const handleSavePortfolio = async () => {
+    const technologies = portfolioForm.technologies.split(',').map(t => t.trim()).filter(Boolean);
+    const payload = { ...portfolioForm, technologies };
+
+    if (editingPortfolio) {
+      const { error } = await supabase.from('portfolio_items').update(payload).eq('id', editingPortfolio.id);
+      if (!error) toast({ title: 'Portfolio item updated' });
+    } else {
+      const { error } = await supabase.from('portfolio_items').insert([payload]);
+      if (!error) toast({ title: 'Portfolio item created' });
+    }
+
+    setPortfolioDialog(false);
+    setEditingPortfolio(null);
+    setPortfolioForm({ title: '', description: '', image_url: '', project_url: '', technologies: '', category: '', is_featured: false });
+    fetchPortfolio();
+  };
+
+  const handleDeletePortfolio = async (id: string) => {
+    const { error } = await supabase.from('portfolio_items').delete().eq('id', id);
+    if (!error) {
+      toast({ title: 'Portfolio item deleted' });
+      fetchPortfolio();
+    }
+  };
+
+  const editPortfolioItem = (item: PortfolioItem) => {
+    setEditingPortfolio(item);
+    setPortfolioForm({
+      title: item.title,
+      description: item.description || '',
+      image_url: item.image_url || '',
+      project_url: item.project_url || '',
+      technologies: item.technologies.join(', '),
+      category: item.category || '',
+      is_featured: item.is_featured,
+    });
+    setPortfolioDialog(true);
+  };
+
+  // Request management
+  const updateRequestStatus = async (id: string, status: string, adminResponse?: string) => {
+    const update: any = { status };
+    if (adminResponse) update.admin_response = adminResponse;
+
+    const { error } = await supabase.from('service_requests').update(update).eq('id', id);
+    if (!error) {
+      toast({ title: 'Request updated' });
+      fetchRequests();
+    }
+  };
+
+  // Message management
+  const markMessageAsRead = async (id: string) => {
+    await supabase.from('contact_messages').update({ is_read: true }).eq('id', id);
+    fetchMessages();
+  };
+
+  const deleteMessage = async (id: string) => {
+    const { error } = await supabase.from('contact_messages').delete().eq('id', id);
+    if (!error) {
+      toast({ title: 'Message deleted' });
+      fetchMessages();
+    }
+  };
+
+  if (!isAdminAuthenticated) {
+    return <Navigate to="/coordinator-admin" replace />;
+  }
+
+  const stats = {
+    totalRequests: requests.length,
+    pendingRequests: requests.filter(r => r.status === 'pending').length,
+    activeServices: services.filter(s => s.is_active).length,
+    unreadMessages: messages.filter(m => !m.is_read).length,
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-sm">T</span>
+              </div>
+              <span className="font-bold gradient-text">THRYLOS Admin</span>
+            </Link>
+          </div>
+          <Button variant="ghost" size="sm" onClick={adminLogout}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Card className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-8 h-8 text-primary" />
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalRequests}</p>
+                  <p className="text-xs text-muted-foreground">Total Requests</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-8 h-8 text-yellow-500" />
+                <div>
+                  <p className="text-2xl font-bold">{stats.pendingRequests}</p>
+                  <p className="text-xs text-muted-foreground">Pending</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Briefcase className="w-8 h-8 text-green-500" />
+                <div>
+                  <p className="text-2xl font-bold">{stats.activeServices}</p>
+                  <p className="text-xs text-muted-foreground">Active Services</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Mail className="w-8 h-8 text-blue-500" />
+                <div>
+                  <p className="text-2xl font-bold">{stats.unreadMessages}</p>
+                  <p className="text-xs text-muted-foreground">Unread Messages</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="requests">Requests</TabsTrigger>
+            <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+            <TabsTrigger value="messages">Messages</TabsTrigger>
+          </TabsList>
+
+          {/* Overview */}
+          <TabsContent value="overview">
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card className="glass-card">
+                <CardHeader>
+                  <CardTitle className="text-lg">Recent Requests</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {requests.slice(0, 5).map((req) => (
+                    <div key={req.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                      <div>
+                        <p className="font-medium text-sm">{req.title}</p>
+                        <p className="text-xs text-muted-foreground">{req.profiles?.email}</p>
+                      </div>
+                      <Badge variant="outline">{req.status}</Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+              <Card className="glass-card">
+                <CardHeader>
+                  <CardTitle className="text-lg">Recent Messages</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {messages.slice(0, 5).map((msg) => (
+                    <div key={msg.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                      <div>
+                        <p className="font-medium text-sm">{msg.name}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{msg.subject || msg.message}</p>
+                      </div>
+                      {!msg.is_read && <Badge className="bg-primary">New</Badge>}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Requests Tab */}
+          <TabsContent value="requests">
+            <div className="space-y-4">
+              {requests.map((req) => (
+                <Card key={req.id} className="glass-card">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold">{req.title}</h3>
+                          <Badge variant="outline">{req.status}</Badge>
+                          <Badge variant="secondary">{req.priority}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">{req.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          From: {req.profiles?.full_name} ({req.profiles?.email})
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue placeholder="Update Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Services Tab */}
+          <TabsContent value="services">
+            <div className="flex justify-end mb-4">
+              <Dialog open={serviceDialog} onOpenChange={setServiceDialog}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary hover:bg-primary/90" onClick={() => {
+                    setEditingService(null);
+                    setServiceForm({ title: '', description: '', icon: 'Code', features: '', price_range: '', is_active: true });
+                  }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Service
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="glass-card border-border">
+                  <DialogHeader>
+                    <DialogTitle>{editingService ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <Input placeholder="Title" value={serviceForm.title} onChange={(e) => setServiceForm({ ...serviceForm, title: e.target.value })} />
+                    <Textarea placeholder="Description" value={serviceForm.description} onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })} />
+                    <Select value={serviceForm.icon} onValueChange={(value) => setServiceForm({ ...serviceForm, icon: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Code">Code</SelectItem>
+                        <SelectItem value="Smartphone">Smartphone</SelectItem>
+                        <SelectItem value="Cloud">Cloud</SelectItem>
+                        <SelectItem value="Cpu">CPU/AI</SelectItem>
+                        <SelectItem value="Shield">Shield</SelectItem>
+                        <SelectItem value="Zap">Zap</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="Features (comma separated)" value={serviceForm.features} onChange={(e) => setServiceForm({ ...serviceForm, features: e.target.value })} />
+                    <Input placeholder="Price Range" value={serviceForm.price_range} onChange={(e) => setServiceForm({ ...serviceForm, price_range: e.target.value })} />
+                    <Button onClick={handleSaveService} className="w-full bg-primary">Save Service</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {services.map((service) => (
+                <Card key={service.id} className="glass-card">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold">{service.title}</h3>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => editService(service)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => handleDeleteService(service.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">{service.description}</p>
+                    <Badge variant={service.is_active ? 'default' : 'secondary'}>
+                      {service.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Portfolio Tab */}
+          <TabsContent value="portfolio">
+            <div className="flex justify-end mb-4">
+              <Dialog open={portfolioDialog} onOpenChange={setPortfolioDialog}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary hover:bg-primary/90" onClick={() => {
+                    setEditingPortfolio(null);
+                    setPortfolioForm({ title: '', description: '', image_url: '', project_url: '', technologies: '', category: '', is_featured: false });
+                  }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Portfolio Item
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="glass-card border-border">
+                  <DialogHeader>
+                    <DialogTitle>{editingPortfolio ? 'Edit Portfolio Item' : 'Add New Portfolio Item'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <Input placeholder="Title" value={portfolioForm.title} onChange={(e) => setPortfolioForm({ ...portfolioForm, title: e.target.value })} />
+                    <Textarea placeholder="Description" value={portfolioForm.description} onChange={(e) => setPortfolioForm({ ...portfolioForm, description: e.target.value })} />
+                    <Input placeholder="Image URL" value={portfolioForm.image_url} onChange={(e) => setPortfolioForm({ ...portfolioForm, image_url: e.target.value })} />
+                    <Input placeholder="Project URL" value={portfolioForm.project_url} onChange={(e) => setPortfolioForm({ ...portfolioForm, project_url: e.target.value })} />
+                    <Input placeholder="Technologies (comma separated)" value={portfolioForm.technologies} onChange={(e) => setPortfolioForm({ ...portfolioForm, technologies: e.target.value })} />
+                    <Input placeholder="Category" value={portfolioForm.category} onChange={(e) => setPortfolioForm({ ...portfolioForm, category: e.target.value })} />
+                    <Button onClick={handleSavePortfolio} className="w-full bg-primary">Save Portfolio Item</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {portfolio.map((item) => (
+                <Card key={item.id} className="glass-card overflow-hidden">
+                  {item.image_url && (
+                    <div className="aspect-video">
+                      <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold">{item.title}</h3>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => editPortfolioItem(item)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => handleDeletePortfolio(item.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{item.category}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Messages Tab */}
+          <TabsContent value="messages">
+            <div className="space-y-4">
+              {messages.map((msg) => (
+                <Card key={msg.id} className={`glass-card ${!msg.is_read ? 'border-primary/50' : ''}`}>
+                  <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold">{msg.name}</h3>
+                          {!msg.is_read && <Badge className="bg-primary">New</Badge>}
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-1">{msg.email} {msg.phone && `• ${msg.phone}`}</p>
+                        {msg.subject && <p className="text-sm font-medium mb-2">{msg.subject}</p>}
+                        <p className="text-sm">{msg.message}</p>
+                        <p className="text-xs text-muted-foreground mt-2">{new Date(msg.created_at).toLocaleString()}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        {!msg.is_read && (
+                          <Button size="sm" variant="outline" onClick={() => markMessageAsRead(msg.id)}>
+                            <Eye className="w-4 h-4 mr-1" />
+                            Mark Read
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" onClick={() => deleteMessage(msg.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+};
+
+export default AdminDashboard;
