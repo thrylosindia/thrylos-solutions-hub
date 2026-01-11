@@ -45,6 +45,13 @@ interface ServiceRequest {
   user_id: string;
   user_name?: string;
   user_email?: string;
+  service_type?: string;
+  color_theme?: string;
+  budget_range?: string;
+  timeline?: string;
+  company_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
 }
 
 interface PortfolioItem {
@@ -77,10 +84,11 @@ interface TeamMember {
   bio: string;
   image_url: string;
   order_index: number;
+  is_active: boolean;
 }
 
 const AdminDashboard = () => {
-  const { isAdminAuthenticated, adminLogout } = useAdminAuth();
+  const { isAdminAuthenticated, adminLogout, loading: authLoading } = useAdminAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -90,20 +98,23 @@ const AdminDashboard = () => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   // Dialog states
   const [serviceDialog, setServiceDialog] = useState(false);
   const [portfolioDialog, setPortfolioDialog] = useState(false);
+  const [teamDialog, setTeamDialog] = useState(false);
   const [responseDialog, setResponseDialog] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingPortfolio, setEditingPortfolio] = useState<PortfolioItem | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamMember | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [adminResponseText, setAdminResponseText] = useState('');
 
   // Upload states
   const [uploading, setUploading] = useState(false);
   const portfolioImageRef = useRef<HTMLInputElement>(null);
+  const teamImageRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const [serviceForm, setServiceForm] = useState({
@@ -111,6 +122,9 @@ const AdminDashboard = () => {
   });
   const [portfolioForm, setPortfolioForm] = useState({
     title: '', description: '', image_url: '', project_url: '', technologies: '', category: '', is_featured: false
+  });
+  const [teamForm, setTeamForm] = useState({
+    name: '', role: '', bio: '', image_url: '', order_index: 0, is_active: true
   });
 
   useEffect(() => {
@@ -127,7 +141,7 @@ const AdminDashboard = () => {
       fetchRequests(),
       fetchPortfolio(),
       fetchMessages(),
-      fetchProfiles(),
+      fetchTeamMembers(),
     ]);
     setLoading(false);
   };
@@ -137,17 +151,18 @@ const AdminDashboard = () => {
     if (data) setServices(data.map(s => ({ ...s, features: s.features || [] })));
   };
 
-  const fetchProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name, email');
-    if (data) setProfiles(data);
-  };
-
   const fetchRequests = async () => {
     const { data, error } = await supabase
       .from('service_requests')
       .select('*')
       .order('created_at', { ascending: false });
     
+    if (error) {
+      console.error('Error fetching requests:', error);
+      toast({ title: 'Error loading requests', description: error.message, variant: 'destructive' });
+      return;
+    }
+
     if (data) {
       // Fetch profiles separately and merge
       const { data: profileData } = await supabase.from('profiles').select('user_id, full_name, email');
@@ -172,6 +187,11 @@ const AdminDashboard = () => {
     if (data) setMessages(data);
   };
 
+  const fetchTeamMembers = async () => {
+    const { data } = await supabase.from('team_members').select('*').order('order_index', { ascending: true });
+    if (data) setTeamMembers(data);
+  };
+
   const subscribeToChanges = () => {
     const channel = supabase
       .channel('admin-changes')
@@ -179,6 +199,7 @@ const AdminDashboard = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_messages' }, fetchMessages)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, fetchServices)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'portfolio_items' }, fetchPortfolio)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, fetchTeamMembers)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -212,6 +233,16 @@ const AdminDashboard = () => {
     const url = await uploadImage(file, 'portfolio');
     if (url) {
       setPortfolioForm(prev => ({ ...prev, image_url: url }));
+    }
+  };
+
+  const handleTeamImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const url = await uploadImage(file, 'team');
+    if (url) {
+      setTeamForm(prev => ({ ...prev, image_url: url }));
     }
   };
 
@@ -314,6 +345,54 @@ const AdminDashboard = () => {
     setPortfolioDialog(true);
   };
 
+  // Team CRUD
+  const handleSaveTeam = async () => {
+    const payload = { ...teamForm };
+
+    if (editingTeam) {
+      const { error } = await supabase.from('team_members').update(payload).eq('id', editingTeam.id);
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Team member updated' });
+      }
+    } else {
+      const { error } = await supabase.from('team_members').insert([payload]);
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Team member added' });
+      }
+    }
+
+    setTeamDialog(false);
+    setEditingTeam(null);
+    setTeamForm({ name: '', role: '', bio: '', image_url: '', order_index: 0, is_active: true });
+    fetchTeamMembers();
+  };
+
+  const handleDeleteTeam = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this team member?')) return;
+    const { error } = await supabase.from('team_members').delete().eq('id', id);
+    if (!error) {
+      toast({ title: 'Team member deleted' });
+      fetchTeamMembers();
+    }
+  };
+
+  const editTeamMember = (member: TeamMember) => {
+    setEditingTeam(member);
+    setTeamForm({
+      name: member.name,
+      role: member.role,
+      bio: member.bio || '',
+      image_url: member.image_url || '',
+      order_index: member.order_index,
+      is_active: member.is_active,
+    });
+    setTeamDialog(true);
+  };
+
   // Request management
   const updateRequestStatus = async (id: string, status: 'pending' | 'in_progress' | 'completed' | 'cancelled') => {
     const { error } = await supabase.from('service_requests').update({ status }).eq('id', id);
@@ -367,6 +446,14 @@ const AdminDashboard = () => {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   if (!isAdminAuthenticated) {
     return <Navigate to="/coordinator-admin" replace />;
   }
@@ -376,6 +463,7 @@ const AdminDashboard = () => {
     pendingRequests: requests.filter(r => r.status === 'pending').length,
     activeServices: services.filter(s => s.is_active).length,
     unreadMessages: messages.filter(m => !m.is_read).length,
+    teamMembers: teamMembers.filter(t => t.is_active).length,
   };
 
   return (
@@ -400,7 +488,7 @@ const AdminDashboard = () => {
 
       <main className="container mx-auto px-4 py-8">
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <Card className="glass-card">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -445,15 +533,27 @@ const AdminDashboard = () => {
               </div>
             </CardContent>
           </Card>
+          <Card className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Users className="w-8 h-8 text-purple-500" />
+                <div>
+                  <p className="text-2xl font-bold">{stats.teamMembers}</p>
+                  <p className="text-xs text-muted-foreground">Team Members</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="requests">Requests</TabsTrigger>
+            <TabsTrigger value="requests">Requests ({requests.length})</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+            <TabsTrigger value="team">Team</TabsTrigger>
             <TabsTrigger value="messages">Messages</TabsTrigger>
           </TabsList>
 
@@ -517,46 +617,78 @@ const AdminDashboard = () => {
                 requests.map((req) => (
                   <Card key={req.id} className="glass-card">
                     <CardContent className="p-6">
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <h3 className="font-semibold">{req.title}</h3>
-                            <Badge variant="outline">{req.status}</Badge>
-                            <Badge variant="secondary">{req.priority}</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-2">{req.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            From: {req.user_name} ({req.user_email})
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(req.created_at).toLocaleString()}
-                          </p>
-                          {req.admin_response && (
-                            <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                              <p className="text-xs text-muted-foreground mb-1">Your Response:</p>
-                              <p className="text-sm">{req.admin_response}</p>
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <h3 className="font-semibold">{req.title}</h3>
+                              <Badge variant="outline">{req.status}</Badge>
+                              <Badge variant="secondary">{req.priority}</Badge>
                             </div>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Select onValueChange={(value) => updateRequestStatus(req.id, value as 'pending' | 'in_progress' | 'completed' | 'cancelled')}>
-                            <SelectTrigger className="w-[140px]">
-                              <SelectValue placeholder="Update Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="in_progress">In Progress</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                              <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
-                            <MessageSquare className="w-4 h-4 mr-1" />
-                            Respond
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
+                            <p className="text-sm text-muted-foreground mb-2">{req.description}</p>
+                            
+                            {/* Request Details Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 my-3 text-xs">
+                              {req.service_type && (
+                                <div className="bg-muted/30 p-2 rounded">
+                                  <span className="text-muted-foreground">Type:</span>{' '}
+                                  <span className="font-medium">{req.service_type.replace(/_/g, ' ')}</span>
+                                </div>
+                              )}
+                              {req.color_theme && (
+                                <div className="bg-muted/30 p-2 rounded">
+                                  <span className="text-muted-foreground">Theme:</span>{' '}
+                                  <span className="font-medium">{req.color_theme}</span>
+                                </div>
+                              )}
+                              {req.budget_range && (
+                                <div className="bg-muted/30 p-2 rounded">
+                                  <span className="text-muted-foreground">Budget:</span>{' '}
+                                  <span className="font-medium">{req.budget_range.replace(/_/g, ' ')}</span>
+                                </div>
+                              )}
+                              {req.timeline && (
+                                <div className="bg-muted/30 p-2 rounded">
+                                  <span className="text-muted-foreground">Timeline:</span>{' '}
+                                  <span className="font-medium">{req.timeline.replace(/_/g, ' ')}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <p>From: <span className="text-foreground">{req.user_name}</span> ({req.user_email})</p>
+                              {req.company_name && <p>Company: <span className="text-foreground">{req.company_name}</span></p>}
+                              {req.contact_phone && <p>Phone: <span className="text-foreground">{req.contact_phone}</span></p>}
+                              <p>Submitted: {new Date(req.created_at).toLocaleString()}</p>
+                            </div>
+
+                            {req.admin_response && (
+                              <div className="mt-3 p-3 bg-muted/50 rounded-lg">
+                                <p className="text-xs text-muted-foreground mb-1">Your Response:</p>
+                                <p className="text-sm">{req.admin_response}</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Select onValueChange={(value) => updateRequestStatus(req.id, value as 'pending' | 'in_progress' | 'completed' | 'cancelled')}>
+                              <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Update Status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="in_progress">In Progress</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                                <SelectItem value="cancelled">Cancelled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
+                              <MessageSquare className="w-4 h-4 mr-1" />
+                              Respond
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -779,6 +911,130 @@ const AdminDashboard = () => {
             </div>
           </TabsContent>
 
+          {/* Team Tab */}
+          <TabsContent value="team">
+            <div className="flex justify-end mb-4">
+              <Dialog open={teamDialog} onOpenChange={setTeamDialog}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary hover:bg-primary/90" onClick={() => {
+                    setEditingTeam(null);
+                    setTeamForm({ name: '', role: '', bio: '', image_url: '', order_index: teamMembers.length, is_active: true });
+                  }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Team Member
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="glass-card border-border max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{editingTeam ? 'Edit Team Member' : 'Add New Team Member'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <Label>Name *</Label>
+                      <Input placeholder="Full name" value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Role *</Label>
+                      <Input placeholder="e.g., Lead Developer, CEO" value={teamForm.role} onChange={(e) => setTeamForm({ ...teamForm, role: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Bio</Label>
+                      <Textarea placeholder="Short bio..." rows={3} value={teamForm.bio} onChange={(e) => setTeamForm({ ...teamForm, bio: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Photo</Label>
+                      <div className="space-y-2">
+                        <input
+                          ref={teamImageRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleTeamImageUpload}
+                          className="hidden"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => teamImageRef.current?.click()}
+                            disabled={uploading}
+                            className="flex-1"
+                          >
+                            {uploading ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Upload className="w-4 h-4 mr-2" />
+                            )}
+                            {uploading ? 'Uploading...' : 'Upload Photo'}
+                          </Button>
+                        </div>
+                        {teamForm.image_url && (
+                          <div className="relative w-32 h-32 mx-auto">
+                            <img src={teamForm.image_url} alt="Preview" className="w-full h-full object-cover rounded-full" />
+                            <Button
+                              size="icon"
+                              variant="destructive"
+                              className="absolute top-0 right-0 h-6 w-6"
+                              onClick={() => setTeamForm({ ...teamForm, image_url: '' })}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Display Order</Label>
+                      <Input 
+                        type="number" 
+                        placeholder="0" 
+                        value={teamForm.order_index} 
+                        onChange={(e) => setTeamForm({ ...teamForm, order_index: parseInt(e.target.value) || 0 })} 
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={teamForm.is_active} onCheckedChange={(checked) => setTeamForm({ ...teamForm, is_active: checked })} />
+                      <Label>Active</Label>
+                    </div>
+                    <Button onClick={handleSaveTeam} className="w-full bg-primary" disabled={uploading}>
+                      {uploading ? 'Uploading...' : 'Save Team Member'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {teamMembers.map((member) => (
+                <Card key={member.id} className={`glass-card ${!member.is_active ? 'opacity-60' : ''}`}>
+                  <CardContent className="p-4 text-center">
+                    <div className="relative inline-block mb-4">
+                      {member.image_url ? (
+                        <img src={member.image_url} alt={member.name} className="w-24 h-24 rounded-full object-cover mx-auto" />
+                      ) : (
+                        <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mx-auto">
+                          <Users className="w-10 h-10 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <h3 className="font-semibold">{member.name}</h3>
+                    <p className="text-sm text-muted-foreground mb-2">{member.role}</p>
+                    {member.bio && <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{member.bio}</p>}
+                    <div className="flex justify-center gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => editTeamMember(member)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleDeleteTeam(member.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                    {!member.is_active && (
+                      <Badge variant="secondary" className="mt-2">Inactive</Badge>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
           {/* Messages Tab */}
           <TabsContent value="messages">
             <div className="space-y-4">
@@ -823,34 +1079,36 @@ const AdminDashboard = () => {
             </div>
           </TabsContent>
         </Tabs>
-      </main>
 
-      {/* Admin Response Dialog */}
-      <Dialog open={responseDialog} onOpenChange={setResponseDialog}>
-        <DialogContent className="glass-card border-border">
-          <DialogHeader>
-            <DialogTitle>Respond to Request</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm font-medium">{selectedRequest?.title}</p>
-              <p className="text-xs text-muted-foreground mt-1">{selectedRequest?.description}</p>
+        {/* Admin Response Dialog */}
+        <Dialog open={responseDialog} onOpenChange={setResponseDialog}>
+          <DialogContent className="glass-card border-border">
+            <DialogHeader>
+              <DialogTitle>Respond to Request</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              {selectedRequest && (
+                <div className="bg-muted/30 p-3 rounded-lg">
+                  <p className="font-medium text-sm">{selectedRequest.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{selectedRequest.description}</p>
+                </div>
+              )}
+              <div>
+                <Label>Your Response</Label>
+                <Textarea 
+                  placeholder="Write your response to the client..." 
+                  rows={4} 
+                  value={adminResponseText} 
+                  onChange={(e) => setAdminResponseText(e.target.value)} 
+                />
+              </div>
+              <Button onClick={sendAdminResponse} className="w-full bg-primary">
+                Send Response
+              </Button>
             </div>
-            <div>
-              <Label>Your Response</Label>
-              <Textarea
-                placeholder="Write your response to the user..."
-                rows={4}
-                value={adminResponseText}
-                onChange={(e) => setAdminResponseText(e.target.value)}
-              />
-            </div>
-            <Button onClick={sendAdminResponse} className="w-full bg-primary">
-              Send Response
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      </main>
     </div>
   );
 };
