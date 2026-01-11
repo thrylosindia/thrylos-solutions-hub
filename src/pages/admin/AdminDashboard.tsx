@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, FileText, Briefcase, Image, Mail, Users, LogOut, 
-  Plus, Edit, Trash2, Eye, Check, X, Loader2, MessageSquare
+  Plus, Edit, Trash2, Eye, Check, X, Loader2, MessageSquare, Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +28,12 @@ interface Service {
   is_active: boolean;
 }
 
+interface Profile {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+}
+
 interface ServiceRequest {
   id: string;
   title: string;
@@ -35,7 +43,8 @@ interface ServiceRequest {
   admin_response: string | null;
   created_at: string;
   user_id: string;
-  profiles?: { full_name: string; email: string };
+  user_name?: string;
+  user_email?: string;
 }
 
 interface PortfolioItem {
@@ -61,6 +70,15 @@ interface ContactMessage {
   created_at: string;
 }
 
+interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  bio: string;
+  image_url: string;
+  order_index: number;
+}
+
 const AdminDashboard = () => {
   const { isAdminAuthenticated, adminLogout } = useAdminAuth();
   const [activeTab, setActiveTab] = useState('overview');
@@ -72,12 +90,20 @@ const AdminDashboard = () => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
 
   // Dialog states
   const [serviceDialog, setServiceDialog] = useState(false);
   const [portfolioDialog, setPortfolioDialog] = useState(false);
+  const [responseDialog, setResponseDialog] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingPortfolio, setEditingPortfolio] = useState<PortfolioItem | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [adminResponseText, setAdminResponseText] = useState('');
+
+  // Upload states
+  const [uploading, setUploading] = useState(false);
+  const portfolioImageRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const [serviceForm, setServiceForm] = useState({
@@ -101,6 +127,7 @@ const AdminDashboard = () => {
       fetchRequests(),
       fetchPortfolio(),
       fetchMessages(),
+      fetchProfiles(),
     ]);
     setLoading(false);
   };
@@ -110,12 +137,29 @@ const AdminDashboard = () => {
     if (data) setServices(data.map(s => ({ ...s, features: s.features || [] })));
   };
 
+  const fetchProfiles = async () => {
+    const { data } = await supabase.from('profiles').select('user_id, full_name, email');
+    if (data) setProfiles(data);
+  };
+
   const fetchRequests = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('service_requests')
-      .select('*, profiles(full_name, email)')
+      .select('*')
       .order('created_at', { ascending: false });
-    if (data) setRequests(data as any);
+    
+    if (data) {
+      // Fetch profiles separately and merge
+      const { data: profileData } = await supabase.from('profiles').select('user_id, full_name, email');
+      const profileMap = new Map(profileData?.map(p => [p.user_id, p]) || []);
+      
+      const enrichedRequests = data.map(req => ({
+        ...req,
+        user_name: profileMap.get(req.user_id)?.full_name || 'Unknown',
+        user_email: profileMap.get(req.user_id)?.email || req.user_id,
+      }));
+      setRequests(enrichedRequests);
+    }
   };
 
   const fetchPortfolio = async () => {
@@ -133,9 +177,42 @@ const AdminDashboard = () => {
       .channel('admin-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, fetchRequests)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_messages' }, fetchMessages)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, fetchServices)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'portfolio_items' }, fetchPortfolio)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
+  };
+
+  // File upload handler
+  const uploadImage = async (file: File, folder: string): Promise<string | null> => {
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('uploads')
+      .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+    setUploading(false);
+
+    if (error) {
+      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(fileName);
+    return publicUrl;
+  };
+
+  const handlePortfolioImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const url = await uploadImage(file, 'portfolio');
+    if (url) {
+      setPortfolioForm(prev => ({ ...prev, image_url: url }));
+    }
   };
 
   // Service CRUD
@@ -145,10 +222,18 @@ const AdminDashboard = () => {
 
     if (editingService) {
       const { error } = await supabase.from('services').update(payload).eq('id', editingService.id);
-      if (!error) toast({ title: 'Service updated successfully' });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Service updated successfully' });
+      }
     } else {
       const { error } = await supabase.from('services').insert([payload]);
-      if (!error) toast({ title: 'Service created successfully' });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Service created successfully' });
+      }
     }
 
     setServiceDialog(false);
@@ -158,6 +243,7 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteService = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this service?')) return;
     const { error } = await supabase.from('services').delete().eq('id', id);
     if (!error) {
       toast({ title: 'Service deleted' });
@@ -185,10 +271,18 @@ const AdminDashboard = () => {
 
     if (editingPortfolio) {
       const { error } = await supabase.from('portfolio_items').update(payload).eq('id', editingPortfolio.id);
-      if (!error) toast({ title: 'Portfolio item updated' });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Portfolio item updated' });
+      }
     } else {
       const { error } = await supabase.from('portfolio_items').insert([payload]);
-      if (!error) toast({ title: 'Portfolio item created' });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Portfolio item created' });
+      }
     }
 
     setPortfolioDialog(false);
@@ -198,6 +292,7 @@ const AdminDashboard = () => {
   };
 
   const handleDeletePortfolio = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this portfolio item?')) return;
     const { error } = await supabase.from('portfolio_items').delete().eq('id', id);
     if (!error) {
       toast({ title: 'Portfolio item deleted' });
@@ -220,13 +315,39 @@ const AdminDashboard = () => {
   };
 
   // Request management
-  const updateRequestStatus = async (id: string, status: string, adminResponse?: string) => {
-    const update: any = { status };
-    if (adminResponse) update.admin_response = adminResponse;
-
-    const { error } = await supabase.from('service_requests').update(update).eq('id', id);
+  const updateRequestStatus = async (id: string, status: 'pending' | 'in_progress' | 'completed' | 'cancelled') => {
+    const { error } = await supabase.from('service_requests').update({ status }).eq('id', id);
     if (!error) {
-      toast({ title: 'Request updated' });
+      toast({ title: 'Request status updated' });
+      fetchRequests();
+    }
+  };
+
+  const openResponseDialog = (request: ServiceRequest) => {
+    setSelectedRequest(request);
+    setAdminResponseText(request.admin_response || '');
+    setResponseDialog(true);
+  };
+
+  const sendAdminResponse = async () => {
+    if (!selectedRequest) return;
+    const { error } = await supabase
+      .from('service_requests')
+      .update({ admin_response: adminResponseText })
+      .eq('id', selectedRequest.id);
+    
+    if (!error) {
+      toast({ title: 'Response sent' });
+      setResponseDialog(false);
+      fetchRequests();
+    }
+  };
+
+  const deleteRequest = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this request?')) return;
+    const { error } = await supabase.from('service_requests').delete().eq('id', id);
+    if (!error) {
+      toast({ title: 'Request deleted' });
       fetchRequests();
     }
   };
@@ -238,6 +359,7 @@ const AdminDashboard = () => {
   };
 
   const deleteMessage = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this message?')) return;
     const { error } = await supabase.from('contact_messages').delete().eq('id', id);
     if (!error) {
       toast({ title: 'Message deleted' });
@@ -327,7 +449,7 @@ const AdminDashboard = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="requests">Requests</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
@@ -343,15 +465,19 @@ const AdminDashboard = () => {
                   <CardTitle className="text-lg">Recent Requests</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {requests.slice(0, 5).map((req) => (
-                    <div key={req.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                      <div>
-                        <p className="font-medium text-sm">{req.title}</p>
-                        <p className="text-xs text-muted-foreground">{req.profiles?.email}</p>
+                  {requests.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No requests yet</p>
+                  ) : (
+                    requests.slice(0, 5).map((req) => (
+                      <div key={req.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                        <div>
+                          <p className="font-medium text-sm">{req.title}</p>
+                          <p className="text-xs text-muted-foreground">{req.user_email}</p>
+                        </div>
+                        <Badge variant="outline">{req.status}</Badge>
                       </div>
-                      <Badge variant="outline">{req.status}</Badge>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </CardContent>
               </Card>
               <Card className="glass-card">
@@ -359,15 +485,19 @@ const AdminDashboard = () => {
                   <CardTitle className="text-lg">Recent Messages</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {messages.slice(0, 5).map((msg) => (
-                    <div key={msg.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                      <div>
-                        <p className="font-medium text-sm">{msg.name}</p>
-                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{msg.subject || msg.message}</p>
+                  {messages.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No messages yet</p>
+                  ) : (
+                    messages.slice(0, 5).map((msg) => (
+                      <div key={msg.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                        <div>
+                          <p className="font-medium text-sm">{msg.name}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[200px]">{msg.subject || msg.message}</p>
+                        </div>
+                        {!msg.is_read && <Badge className="bg-primary">New</Badge>}
                       </div>
-                      {!msg.is_read && <Badge className="bg-primary">New</Badge>}
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -376,38 +506,63 @@ const AdminDashboard = () => {
           {/* Requests Tab */}
           <TabsContent value="requests">
             <div className="space-y-4">
-              {requests.map((req) => (
-                <Card key={req.id} className="glass-card">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold">{req.title}</h3>
-                          <Badge variant="outline">{req.status}</Badge>
-                          <Badge variant="secondary">{req.priority}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">{req.description}</p>
-                        <p className="text-xs text-muted-foreground">
-                          From: {req.profiles?.full_name} ({req.profiles?.email})
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
-                          <SelectTrigger className="w-[140px]">
-                            <SelectValue placeholder="Update Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+              {requests.length === 0 ? (
+                <Card className="glass-card">
+                  <CardContent className="py-12 text-center">
+                    <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No service requests yet</p>
                   </CardContent>
                 </Card>
-              ))}
+              ) : (
+                requests.map((req) => (
+                  <Card key={req.id} className="glass-card">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <h3 className="font-semibold">{req.title}</h3>
+                            <Badge variant="outline">{req.status}</Badge>
+                            <Badge variant="secondary">{req.priority}</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">{req.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            From: {req.user_name} ({req.user_email})
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(req.created_at).toLocaleString()}
+                          </p>
+                          {req.admin_response && (
+                            <div className="mt-3 p-3 bg-muted/50 rounded-lg">
+                              <p className="text-xs text-muted-foreground mb-1">Your Response:</p>
+                              <p className="text-sm">{req.admin_response}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Select onValueChange={(value) => updateRequestStatus(req.id, value as 'pending' | 'in_progress' | 'completed' | 'cancelled')}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Update Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="in_progress">In Progress</SelectItem>
+                              <SelectItem value="completed">Completed</SelectItem>
+                              <SelectItem value="cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
+                            <MessageSquare className="w-4 h-4 mr-1" />
+                            Respond
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
           </TabsContent>
 
@@ -424,26 +579,45 @@ const AdminDashboard = () => {
                     Add Service
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="glass-card border-border">
+                <DialogContent className="glass-card border-border max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingService ? 'Edit Service' : 'Add New Service'}</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 mt-4">
-                    <Input placeholder="Title" value={serviceForm.title} onChange={(e) => setServiceForm({ ...serviceForm, title: e.target.value })} />
-                    <Textarea placeholder="Description" value={serviceForm.description} onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })} />
-                    <Select value={serviceForm.icon} onValueChange={(value) => setServiceForm({ ...serviceForm, icon: value })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Code">Code</SelectItem>
-                        <SelectItem value="Smartphone">Smartphone</SelectItem>
-                        <SelectItem value="Cloud">Cloud</SelectItem>
-                        <SelectItem value="Cpu">CPU/AI</SelectItem>
-                        <SelectItem value="Shield">Shield</SelectItem>
-                        <SelectItem value="Zap">Zap</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input placeholder="Features (comma separated)" value={serviceForm.features} onChange={(e) => setServiceForm({ ...serviceForm, features: e.target.value })} />
-                    <Input placeholder="Price Range" value={serviceForm.price_range} onChange={(e) => setServiceForm({ ...serviceForm, price_range: e.target.value })} />
+                    <div>
+                      <Label>Title</Label>
+                      <Input placeholder="Service title" value={serviceForm.title} onChange={(e) => setServiceForm({ ...serviceForm, title: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <Textarea placeholder="Description" rows={3} value={serviceForm.description} onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Icon</Label>
+                      <Select value={serviceForm.icon} onValueChange={(value) => setServiceForm({ ...serviceForm, icon: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Code">Code</SelectItem>
+                          <SelectItem value="Smartphone">Smartphone</SelectItem>
+                          <SelectItem value="Cloud">Cloud</SelectItem>
+                          <SelectItem value="Cpu">CPU/AI</SelectItem>
+                          <SelectItem value="Shield">Shield</SelectItem>
+                          <SelectItem value="Zap">Zap</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Features (comma separated)</Label>
+                      <Input placeholder="Feature 1, Feature 2, Feature 3" value={serviceForm.features} onChange={(e) => setServiceForm({ ...serviceForm, features: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Price Range</Label>
+                      <Input placeholder="Starting ₹25,000" value={serviceForm.price_range} onChange={(e) => setServiceForm({ ...serviceForm, price_range: e.target.value })} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={serviceForm.is_active} onCheckedChange={(checked) => setServiceForm({ ...serviceForm, is_active: checked })} />
+                      <Label>Active</Label>
+                    </div>
                     <Button onClick={handleSaveService} className="w-full bg-primary">Save Service</Button>
                   </div>
                 </DialogContent>
@@ -464,7 +638,8 @@ const AdminDashboard = () => {
                         </Button>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{service.description}</p>
+                    <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{service.description}</p>
+                    <p className="text-xs text-primary mb-2">{service.price_range}</p>
                     <Badge variant={service.is_active ? 'default' : 'secondary'}>
                       {service.is_active ? 'Active' : 'Inactive'}
                     </Badge>
@@ -487,18 +662,89 @@ const AdminDashboard = () => {
                     Add Portfolio Item
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="glass-card border-border">
+                <DialogContent className="glass-card border-border max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingPortfolio ? 'Edit Portfolio Item' : 'Add New Portfolio Item'}</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 mt-4">
-                    <Input placeholder="Title" value={portfolioForm.title} onChange={(e) => setPortfolioForm({ ...portfolioForm, title: e.target.value })} />
-                    <Textarea placeholder="Description" value={portfolioForm.description} onChange={(e) => setPortfolioForm({ ...portfolioForm, description: e.target.value })} />
-                    <Input placeholder="Image URL" value={portfolioForm.image_url} onChange={(e) => setPortfolioForm({ ...portfolioForm, image_url: e.target.value })} />
-                    <Input placeholder="Project URL" value={portfolioForm.project_url} onChange={(e) => setPortfolioForm({ ...portfolioForm, project_url: e.target.value })} />
-                    <Input placeholder="Technologies (comma separated)" value={portfolioForm.technologies} onChange={(e) => setPortfolioForm({ ...portfolioForm, technologies: e.target.value })} />
-                    <Input placeholder="Category" value={portfolioForm.category} onChange={(e) => setPortfolioForm({ ...portfolioForm, category: e.target.value })} />
-                    <Button onClick={handleSavePortfolio} className="w-full bg-primary">Save Portfolio Item</Button>
+                    <div>
+                      <Label>Title</Label>
+                      <Input placeholder="Project title" value={portfolioForm.title} onChange={(e) => setPortfolioForm({ ...portfolioForm, title: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <Textarea placeholder="Project description" rows={3} value={portfolioForm.description} onChange={(e) => setPortfolioForm({ ...portfolioForm, description: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Image</Label>
+                      <div className="space-y-2">
+                        <input
+                          ref={portfolioImageRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePortfolioImageUpload}
+                          className="hidden"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => portfolioImageRef.current?.click()}
+                            disabled={uploading}
+                            className="flex-1"
+                          >
+                            {uploading ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Upload className="w-4 h-4 mr-2" />
+                            )}
+                            {uploading ? 'Uploading...' : 'Upload Image'}
+                          </Button>
+                        </div>
+                        {portfolioForm.image_url && (
+                          <div className="relative">
+                            <img src={portfolioForm.image_url} alt="Preview" className="w-full h-32 object-cover rounded-lg" />
+                            <Button
+                              size="icon"
+                              variant="destructive"
+                              className="absolute top-2 right-2 h-6 w-6"
+                              onClick={() => setPortfolioForm({ ...portfolioForm, image_url: '' })}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Project URL</Label>
+                      <Input placeholder="https://example.com" value={portfolioForm.project_url} onChange={(e) => setPortfolioForm({ ...portfolioForm, project_url: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Technologies (comma separated)</Label>
+                      <Input placeholder="React, Node.js, PostgreSQL" value={portfolioForm.technologies} onChange={(e) => setPortfolioForm({ ...portfolioForm, technologies: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Category</Label>
+                      <Select value={portfolioForm.category} onValueChange={(value) => setPortfolioForm({ ...portfolioForm, category: value })}>
+                        <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Web Development">Web Development</SelectItem>
+                          <SelectItem value="Mobile Apps">Mobile Apps</SelectItem>
+                          <SelectItem value="E-commerce">E-commerce</SelectItem>
+                          <SelectItem value="AI/ML">AI/ML</SelectItem>
+                          <SelectItem value="Cloud Solutions">Cloud Solutions</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={portfolioForm.is_featured} onCheckedChange={(checked) => setPortfolioForm({ ...portfolioForm, is_featured: checked })} />
+                      <Label>Featured</Label>
+                    </div>
+                    <Button onClick={handleSavePortfolio} className="w-full bg-primary" disabled={uploading}>
+                      {uploading ? 'Uploading...' : 'Save Portfolio Item'}
+                    </Button>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -513,7 +759,10 @@ const AdminDashboard = () => {
                   )}
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold">{item.title}</h3>
+                      <div>
+                        <h3 className="font-semibold">{item.title}</h3>
+                        <p className="text-xs text-muted-foreground">{item.category}</p>
+                      </div>
                       <div className="flex gap-1">
                         <Button size="icon" variant="ghost" onClick={() => editPortfolioItem(item)}>
                           <Edit className="w-4 h-4" />
@@ -523,7 +772,7 @@ const AdminDashboard = () => {
                         </Button>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">{item.category}</p>
+                    {item.is_featured && <Badge className="bg-primary">Featured</Badge>}
                   </CardContent>
                 </Card>
               ))}
@@ -533,39 +782,75 @@ const AdminDashboard = () => {
           {/* Messages Tab */}
           <TabsContent value="messages">
             <div className="space-y-4">
-              {messages.map((msg) => (
-                <Card key={msg.id} className={`glass-card ${!msg.is_read ? 'border-primary/50' : ''}`}>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold">{msg.name}</h3>
-                          {!msg.is_read && <Badge className="bg-primary">New</Badge>}
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-1">{msg.email} {msg.phone && `• ${msg.phone}`}</p>
-                        {msg.subject && <p className="text-sm font-medium mb-2">{msg.subject}</p>}
-                        <p className="text-sm">{msg.message}</p>
-                        <p className="text-xs text-muted-foreground mt-2">{new Date(msg.created_at).toLocaleString()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        {!msg.is_read && (
-                          <Button size="sm" variant="outline" onClick={() => markMessageAsRead(msg.id)}>
-                            <Eye className="w-4 h-4 mr-1" />
-                            Mark Read
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" onClick={() => deleteMessage(msg.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
+              {messages.length === 0 ? (
+                <Card className="glass-card">
+                  <CardContent className="py-12 text-center">
+                    <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No messages yet</p>
                   </CardContent>
                 </Card>
-              ))}
+              ) : (
+                messages.map((msg) => (
+                  <Card key={msg.id} className={`glass-card ${!msg.is_read ? 'border-primary/50' : ''}`}>
+                    <CardContent className="p-6">
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-semibold">{msg.name}</h3>
+                            {!msg.is_read && <Badge className="bg-primary">New</Badge>}
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-1">{msg.email} {msg.phone && `• ${msg.phone}`}</p>
+                          {msg.subject && <p className="text-sm font-medium mb-2">{msg.subject}</p>}
+                          <p className="text-sm">{msg.message}</p>
+                          <p className="text-xs text-muted-foreground mt-2">{new Date(msg.created_at).toLocaleString()}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {!msg.is_read && (
+                            <Button size="sm" variant="outline" onClick={() => markMessageAsRead(msg.id)}>
+                              <Eye className="w-4 h-4 mr-1" />
+                              Mark Read
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => deleteMessage(msg.id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Admin Response Dialog */}
+      <Dialog open={responseDialog} onOpenChange={setResponseDialog}>
+        <DialogContent className="glass-card border-border">
+          <DialogHeader>
+            <DialogTitle>Respond to Request</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium">{selectedRequest?.title}</p>
+              <p className="text-xs text-muted-foreground mt-1">{selectedRequest?.description}</p>
+            </div>
+            <div>
+              <Label>Your Response</Label>
+              <Textarea
+                placeholder="Write your response to the user..."
+                rows={4}
+                value={adminResponseText}
+                onChange={(e) => setAdminResponseText(e.target.value)}
+              />
+            </div>
+            <Button onClick={sendAdminResponse} className="w-full bg-primary">
+              Send Response
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
