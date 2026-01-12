@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { 
-  FileText, Briefcase, Mail, Users, LogOut, 
-  Plus, Edit, Trash2, Eye, X, Loader2, MessageSquare, Upload
+  FileText, Briefcase, Mail, Users, LogOut, Flame, CheckCircle,
+  Plus, Edit, AlertTriangle, Trash2, Eye, X, Loader2, MessageSquare, Upload,
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -489,10 +490,18 @@ const AdminDashboard = () => {
       <header className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">T</span>
-            </div>
-            <span className="font-bold gradient-text">THRYLOS Admin</span>
+              <img
+                src="/thrylosindia.png"
+                alt="Thrylos logo"
+                className="w-6 h-6 object-contain rounded-sm"
+                loading="lazy"
+              />
+            <div
+        className="text-2xl font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text cursor-pointer"
+        style={{ fontFamily: "'Nixmat', sans-serif" }}
+      >
+        THRYLOS ADMIN
+      </div>
           </Link>
           <Button variant="ghost" size="sm" onClick={adminLogout}>
             <LogOut className="w-4 h-4 mr-2" />
@@ -621,98 +630,182 @@ const AdminDashboard = () => {
               </TabsContent>
 
               {/* Requests Tab */}
-              <TabsContent value="requests">
-                <div className="space-y-4">
-                  {requests.length === 0 ? (
-                    <Card className="glass-card">
-                      <CardContent className="py-12 text-center">
-                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">No service requests yet</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    requests.map((req) => (
-                      <Card key={req.id} className="glass-card">
-                        <CardContent className="p-6">
-                          <div className="flex flex-col gap-4">
-                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                  <h3 className="font-semibold">{req.title}</h3>
-                                  <Badge variant="outline">{req.status}</Badge>
-                                  <Badge variant="secondary">{req.priority}</Badge>
-                                </div>
-                                <p className="text-sm text-muted-foreground mb-2">{req.description}</p>
-                                
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 my-3 text-xs">
-                                  {req.service_type && (
-                                    <div className="bg-muted/30 p-2 rounded">
-                                      <span className="text-muted-foreground">Type:</span>{' '}
-                                      <span className="font-medium">{req.service_type.replace(/_/g, ' ')}</span>
-                                    </div>
-                                  )}
-                                  {req.color_theme && (
-                                    <div className="bg-muted/30 p-2 rounded">
-                                      <span className="text-muted-foreground">Theme:</span>{' '}
-                                      <span className="font-medium">{req.color_theme}</span>
-                                    </div>
-                                  )}
-                                  {req.budget_range && (
-                                    <div className="bg-muted/30 p-2 rounded">
-                                      <span className="text-muted-foreground">Budget:</span>{' '}
-                                      <span className="font-medium">{req.budget_range.replace(/_/g, ' ')}</span>
-                                    </div>
-                                  )}
-                                  {req.timeline && (
-                                    <div className="bg-muted/30 p-2 rounded">
-                                      <span className="text-muted-foreground">Timeline:</span>{' '}
-                                      <span className="font-medium">{req.timeline.replace(/_/g, ' ')}</span>
-                                    </div>
-                                  )}
-                                </div>
+<TabsContent value="requests">
+  <div className="space-y-4">
+    {requests.length === 0 ? (
+      <Card className="glass-card">
+        <CardContent className="py-12 text-center">
+          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">No service requests yet</p>
+        </CardContent>
+      </Card>
+    ) : (
+      requests.map((req) => (
+        <Card
+          key={req.id}
+          className="glass-card border border-border/50 hover:border-border transition"
+        >
+          <CardContent className="p-6 space-y-5">
 
-                                <div className="text-xs text-muted-foreground space-y-1">
-                                  <p>From: <span className="text-foreground">{req.user_name}</span> ({req.user_email})</p>
-                                  {req.company_name && <p>Company: <span className="text-foreground">{req.company_name}</span></p>}
-                                  {req.contact_phone && <p>Phone: <span className="text-foreground">{req.contact_phone}</span></p>}
-                                  <p>Submitted: {new Date(req.created_at).toLocaleString()}</p>
-                                </div>
+            {/* Header */}
+<div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
 
-                                {req.admin_response && (
-                                  <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                                    <p className="text-xs text-muted-foreground mb-1">Your Response:</p>
-                                    <p className="text-sm">{req.admin_response}</p>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
-                                  <SelectTrigger className="w-[140px]">
-                                    <SelectValue placeholder="Update Status" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="pending">Pending</SelectItem>
-                                    <SelectItem value="in_progress">In Progress</SelectItem>
-                                    <SelectItem value="completed">Completed</SelectItem>
-                                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
-                                  <MessageSquare className="w-4 h-4 mr-1" />
-                                  Respond
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
-                                  <Trash2 className="w-4 h-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
+  {/* Left: Project Info */}
+  <div className="flex-1 space-y-4">
+
+    {/* Title Box */}
+    <div className="bg-muted/30 border border-border/50 rounded-lg p-4 space-y-1">
+      <p className="text-xs text-muted-foreground uppercase tracking-wide">
+        Project Title
+      </p>
+      <h3 className="text-lg font-semibold">
+        {req.title}
+      </h3>
+    </div>
+
+    {/* Description Box */}
+    <div className="bg-muted/30 border border-border/50 rounded-lg p-4 space-y-1">
+      <p className="text-xs text-muted-foreground uppercase tracking-wide">
+        Project Description
+      </p>
+      <p className="text-sm leading-relaxed">
+        {req.description}
+      </p>
+    </div>
+
+    {/* Status + Priority */}
+    <div className="flex flex-wrap gap-2">
+  {/* Status */}
+  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
+    {req.status === "in_progress" && <Loader2 className="w-3 h-3 animate-spin" />}
+    {req.status === "pending" && <Clock className="w-3 h-3 text-yellow-500" />}
+    {req.status === "cancelled" && <AlertTriangle className="w-3 h-3 text-red-500" />}
+    {req.status === "completed" && <CheckCircle className="w-3 h-3 text-green-500" />}
+    {req.status.replace(/_/g, " ")}
+  </Badge>
+
+  {/* Priority */}
+  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
+    {req.priority === "high" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
+    {req.priority}
+  </Badge>
+  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
+  {req.priority === "medium" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
+  {req.priority}
+  </Badge>
+</div>
+
+  </div>
+
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2">
+                <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Update Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
+                  <MessageSquare className="w-4 h-4 mr-1" />
+                  Respond
+                </Button>
+
+                <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="h-px bg-border/50" />
+
+            {/* Request Details */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              {req.service_type && (
+                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                  <p className="text-xs text-muted-foreground">Service Type</p>
+                  <p className="font-medium capitalize">
+                    {req.service_type.replace(/_/g, ' ')}
+                  </p>
                 </div>
-              </TabsContent>
+              )}
+
+              {req.color_theme && (
+                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                  <p className="text-xs text-muted-foreground">Theme</p>
+                  <p className="font-medium">{req.color_theme}</p>
+                </div>
+              )}
+
+              {req.budget_range && (
+                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                  <p className="text-xs text-muted-foreground">Budget</p>
+                  <p className="font-medium capitalize">
+                    {req.budget_range.replace(/_/g, ' ')}
+                  </p>
+                </div>
+              )}
+
+              {req.timeline && (
+                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                  <p className="text-xs text-muted-foreground">Timeline</p>
+                  <p className="font-medium capitalize">
+                    {req.timeline.replace(/_/g, ' ')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Client Info */}
+            <div className="bg-muted/30 p-4 rounded-lg space-y-1 text-sm">
+              <p>
+                <span className="text-muted-foreground">Client:</span>{" "}
+                <span className="font-medium">{req.user_name}</span>{" "}
+                <span className="text-muted-foreground">({req.user_email})</span>
+              </p>
+
+              {req.company_name && (
+                <p>
+                  <span className="text-muted-foreground">Company:</span>{" "}
+                  {req.company_name}
+                </p>
+              )}
+
+              {req.contact_phone && (
+                <p>
+                  <span className="text-muted-foreground">Phone:</span>{" "}
+                  {req.contact_phone}
+                </p>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                Submitted on {new Date(req.created_at).toLocaleString()}
+              </p>
+            </div>
+
+            {/* Admin Response */}
+            {req.admin_response && (
+              <div className="border border-border/50 bg-muted/40 p-4 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Your Response</p>
+                <p className="text-sm leading-relaxed">
+                  {req.admin_response}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))
+    )}
+  </div>
+</TabsContent>
+
 
               {/* Services Tab */}
               <TabsContent value="services">
