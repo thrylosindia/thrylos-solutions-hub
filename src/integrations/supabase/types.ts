@@ -50,6 +50,33 @@ export type Database = {
         }
         Relationships: []
       }
+      otp_verifications: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          otp_code: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          otp_code: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          otp_code?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       portfolio_items: {
         Row: {
           category: string | null
@@ -122,9 +149,43 @@ export type Database = {
         }
         Relationships: []
       }
+      project_managers: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          is_available: boolean
+          name: string
+          phone: string | null
+          specialization: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          is_available?: boolean
+          name: string
+          phone?: string | null
+          specialization?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          is_available?: boolean
+          name?: string
+          phone?: string | null
+          specialization?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       service_requests: {
         Row: {
           admin_response: string | null
+          assigned_pm_id: string | null
           budget_range: string | null
           color_theme: string | null
           company_name: string | null
@@ -134,6 +195,7 @@ export type Database = {
           description: string | null
           id: string
           notes: string | null
+          pm_assigned_at: string | null
           priority: string | null
           service_id: string | null
           service_type: string | null
@@ -145,6 +207,7 @@ export type Database = {
         }
         Insert: {
           admin_response?: string | null
+          assigned_pm_id?: string | null
           budget_range?: string | null
           color_theme?: string | null
           company_name?: string | null
@@ -154,6 +217,7 @@ export type Database = {
           description?: string | null
           id?: string
           notes?: string | null
+          pm_assigned_at?: string | null
           priority?: string | null
           service_id?: string | null
           service_type?: string | null
@@ -165,6 +229,7 @@ export type Database = {
         }
         Update: {
           admin_response?: string | null
+          assigned_pm_id?: string | null
           budget_range?: string | null
           color_theme?: string | null
           company_name?: string | null
@@ -174,6 +239,7 @@ export type Database = {
           description?: string | null
           id?: string
           notes?: string | null
+          pm_assigned_at?: string | null
           priority?: string | null
           service_id?: string | null
           service_type?: string | null
@@ -184,6 +250,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "service_requests_assigned_pm_id_fkey"
+            columns: ["assigned_pm_id"]
+            isOneToOne: false
+            referencedRelation: "project_managers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "service_requests_service_id_fkey"
             columns: ["service_id"]
