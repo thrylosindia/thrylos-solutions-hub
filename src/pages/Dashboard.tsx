@@ -164,20 +164,24 @@ const Dashboard = () => {
     setSubmitting(false);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'in_progress':
-        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
-      case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'cancelled':
-        return <AlertCircle className="w-4 h-4 text-red-500" />;
-      default:
-        return <Clock className="w-4 h-4" />;
-    }
-  };
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30";
+      
+    case "in_progress":
+      return "bg-blue-500/10 text-blue-400 border border-blue-500/30 animate-pulse";
+
+    case "completed":
+      return "bg-green-500/10 text-green-400 border border-green-500/30";
+
+    case "cancelled":
+      return "bg-red-500/20 text-red-400 border border-red-500/40 animate-bounce";
+
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+};
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -220,10 +224,13 @@ const Dashboard = () => {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">T</span>
-              </div>
-              <span className="font-bold gradient-text">THRYLOS</span>
+                <img src="/thrylosindia.png" alt="Thrylos logo" className="w-6 h-6 object-contain" />
+              <div
+        className="text-2xl font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text cursor-pointer"
+        style={{ fontFamily: "'Nixmat', sans-serif" }}
+      >
+        THRYLOS
+      </div>
             </Link>
           </div>
           <div className="flex items-center gap-4">
@@ -402,12 +409,12 @@ const Dashboard = () => {
                         <SelectValue placeholder="Select budget range" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="under_25k">Under ₹25,000</SelectItem>
-                        <SelectItem value="25k_50k">₹25,000 - ₹50,000</SelectItem>
-                        <SelectItem value="50k_1lac">₹50,000 - ₹1,00,000</SelectItem>
-                        <SelectItem value="1lac_3lac">₹1,00,000 - ₹3,00,000</SelectItem>
-                        <SelectItem value="3lac_5lac">₹3,00,000 - ₹5,00,000</SelectItem>
-                        <SelectItem value="above_5lac">Above ₹5,00,000</SelectItem>
+                        <SelectItem value="under_25k">Under ₹1,000</SelectItem>
+                        <SelectItem value="25k_50k">₹1,000 - ₹2,000</SelectItem>
+                        <SelectItem value="50k_1lac">₹2,000 - ₹5,000</SelectItem>
+                        <SelectItem value="1lac_3lac">₹5,000 - ₹10,000</SelectItem>
+                        <SelectItem value="3lac_5lac">₹10,000 - ₹15,000</SelectItem>
+                        <SelectItem value="above_5lac">Above ₹15,000</SelectItem>
                         <SelectItem value="flexible">Flexible</SelectItem>
                       </SelectContent>
                     </Select>
@@ -457,7 +464,7 @@ const Dashboard = () => {
                     <Label>Contact Phone</Label>
                     <Input
                       type="tel"
-                      placeholder="+91 98765 43210"
+                      placeholder="+91 XXXXX XXXXX"
                       value={newRequest.contact_phone}
                       onChange={(e) => setNewRequest({ ...newRequest, contact_phone: e.target.value })}
                     />
@@ -511,61 +518,77 @@ const Dashboard = () => {
         ) : (
           <div className="space-y-4">
             {requests.map((request) => (
-              <Card key={request.id} className="glass-card hover:border-primary/30 transition-colors">
-                <CardContent className="p-6">
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2 flex-wrap">
-                          {getStatusIcon(request.status)}
-                          <h3 className="font-semibold">{request.title}</h3>
-                          <Badge variant="outline" className={getStatusColor(request.status)}>
-                            {request.status.replace('_', ' ')}
-                          </Badge>
-                          <Badge variant="secondary" className="capitalize">
-                            {request.priority}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">{request.description}</p>
-                        
-                        {/* Additional Details */}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {request.service_type && (
-                            <Badge variant="outline" className="text-xs">
-                              {request.service_type.replace('_', ' ')}
-                            </Badge>
-                          )}
-                          {request.color_theme && (
-                            <Badge variant="outline" className="text-xs">
-                              Theme: {request.color_theme}
-                            </Badge>
-                          )}
-                          {request.budget_range && (
-                            <Badge variant="outline" className="text-xs">
-                              Budget: {request.budget_range.replace('_', ' ')}
-                            </Badge>
-                          )}
-                          {request.timeline && (
-                            <Badge variant="outline" className="text-xs">
-                              Timeline: {request.timeline.replace('_', ' ')}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground whitespace-nowrap">
-                        {new Date(request.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    
-                    {request.admin_response && (
-                      <div className="bg-muted/50 p-3 rounded-lg">
-                        <p className="text-xs text-muted-foreground mb-1">Admin Response:</p>
-                        <p className="text-sm">{request.admin_response}</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+             <Card key={request.id} className="glass-card border border-border/40 hover:border-primary/40 transition-all">
+  <CardContent className="p-6 space-y-5">
+
+    {/* Top Row */}
+    <div className="flex flex-col md:flex-row justify-between gap-4">
+
+      {/* Left */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">{request.title}</h3>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className={getStatusColor(request.status)}>
+            {request.status.replace("_", " ")}
+          </Badge>
+
+          <Badge variant="secondary" className="capitalize">
+            {request.priority}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Right */}
+      <div className="text-xs text-muted-foreground whitespace-nowrap">
+        Submitted on
+        <div className="text-foreground font-medium">
+          {new Date(request.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    </div>
+
+    {/* Description */}
+    <div className="bg-muted/40 border border-border/40 rounded-lg p-4">
+      <p className="text-xs text-muted-foreground uppercase mb-1">Description</p>
+      <p className="text-sm leading-relaxed">{request.description}</p>
+    </div>
+
+    {/* Tags */}
+    <div className="flex flex-wrap gap-2 text-xs">
+      {request.service_type && (
+        <span className="px-2 py-1 rounded bg-muted/50 border border-border/40">
+          {request.service_type.replace("_", " ")}
+        </span>
+      )}
+      {request.color_theme && (
+        <span className="px-2 py-1 rounded bg-muted/50 border border-border/40">
+          Theme: {request.color_theme}
+        </span>
+      )}
+      {request.budget_range && (
+        <span className="px-2 py-1 rounded bg-muted/50 border border-border/40">
+          Budget: {request.budget_range.replace("_", " ")}
+        </span>
+      )}
+      {request.timeline && (
+        <span className="px-2 py-1 rounded bg-muted/50 border border-border/40">
+          Timeline: {request.timeline.replace("_", " ")}
+        </span>
+      )}
+    </div>
+
+    {/* Admin Response */}
+    {request.admin_response && (
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+        <p className="text-xs text-blue-400 uppercase mb-1">Admin Response</p>
+        <p className="text-sm leading-relaxed">{request.admin_response}</p>
+      </div>
+    )}
+
+  </CardContent>
+</Card>
+
             ))}
           </div>
         )}
