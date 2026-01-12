@@ -13,6 +13,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
+interface ProjectManager {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  specialization: string | null;
+}
+
 interface ServiceRequest {
   id: string;
   title: string;
@@ -29,6 +37,9 @@ interface ServiceRequest {
   company_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  assigned_pm_id: string | null;
+  pm_assigned_at: string | null;
+  project_manager?: ProjectManager | null;
 }
 
 interface Profile {
@@ -75,7 +86,7 @@ const Dashboard = () => {
   const fetchData = async () => {
     if (!user) return;
 
-    const [requestsRes, profileRes, servicesRes] = await Promise.all([
+    const [requestsRes, profileRes, servicesRes, pmRes] = await Promise.all([
       supabase
         .from('service_requests')
         .select('*')
@@ -90,9 +101,20 @@ const Dashboard = () => {
         .from('services')
         .select('id, title')
         .eq('is_active', true),
+      supabase
+        .from('project_managers')
+        .select('*'),
     ]);
 
-    if (requestsRes.data) setRequests(requestsRes.data as ServiceRequest[]);
+    const pmMap = new Map(pmRes.data?.map((pm: ProjectManager) => [pm.id, pm]) || []);
+    
+    if (requestsRes.data) {
+      const enrichedRequests = requestsRes.data.map((req: ServiceRequest) => ({
+        ...req,
+        project_manager: req.assigned_pm_id ? pmMap.get(req.assigned_pm_id) : null,
+      }));
+      setRequests(enrichedRequests as ServiceRequest[]);
+    }
     if (profileRes.data) setProfile(profileRes.data);
     if (servicesRes.data) setServices(servicesRes.data);
     setLoading(false);
@@ -577,6 +599,23 @@ const getStatusIcon = (status: string) => {
         </span>
       )}
     </div>
+
+    {/* Assigned Project Manager */}
+    {request.assigned_pm_id && request.project_manager && (
+      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+        <p className="text-xs text-green-400 uppercase mb-2 font-semibold">Assigned Project Manager</p>
+        <div className="space-y-1 text-sm">
+          <p><span className="text-muted-foreground">Name:</span> <span className="font-medium">{request.project_manager.name}</span></p>
+          <p><span className="text-muted-foreground">Email:</span> <a href={`mailto:${request.project_manager.email}`} className="text-primary hover:underline">{request.project_manager.email}</a></p>
+          {request.project_manager.phone && (
+            <p><span className="text-muted-foreground">Phone:</span> <a href={`tel:${request.project_manager.phone}`} className="text-primary hover:underline">{request.project_manager.phone}</a></p>
+          )}
+          {request.project_manager.specialization && (
+            <p><span className="text-muted-foreground">Specialization:</span> {request.project_manager.specialization}</p>
+          )}
+        </div>
+      </div>
+    )}
 
     {/* Admin Response */}
     {request.admin_response && (

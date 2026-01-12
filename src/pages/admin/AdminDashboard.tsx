@@ -114,6 +114,15 @@ interface Profile {
   email: string | null;
 }
 
+interface ProjectManager {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  specialization: string | null;
+  is_available: boolean;
+}
+
 const AdminDashboard = () => {
   const { isAdminAuthenticated, adminLogout, loading: authLoading, getAdminToken } = useAdminAuth();
   const [activeTab, setActiveTab] = useState('overview');
@@ -126,6 +135,7 @@ const AdminDashboard = () => {
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [projectManagers, setProjectManagers] = useState<ProjectManager[]>([]);
 
   // Dialog states
   const [serviceDialog, setServiceDialog] = useState(false);
@@ -169,12 +179,36 @@ const AdminDashboard = () => {
         fetchPortfolio(),
         fetchMessages(),
         fetchTeamMembers(),
+        fetchProjectManagers(),
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({ title: 'Error loading data', variant: 'destructive' });
     }
     setLoading(false);
+  };
+
+  const fetchProjectManagers = async () => {
+    const data = await adminApi('select', 'project_managers', {
+      filters: { order: { column: 'name', ascending: true } }
+    });
+    setProjectManagers(data || []);
+  };
+
+  const assignPM = async (requestId: string, pmId: string) => {
+    try {
+      await adminApi('update', 'service_requests', { 
+        data: { assigned_pm_id: pmId, pm_assigned_at: new Date().toISOString() }, 
+        id: requestId 
+      });
+      // Update PM availability
+      await adminApi('update', 'project_managers', { data: { is_available: false }, id: pmId });
+      toast({ title: 'Project Manager assigned' });
+      fetchRequests();
+      fetchProjectManagers();
+    } catch (error) {
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    }
   };
 
   const fetchServices = async () => {
@@ -581,6 +615,7 @@ const AdminDashboard = () => {
               <TabsList className="mb-6 flex-wrap">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="requests">Requests ({requests.length})</TabsTrigger>
+                <TabsTrigger value="project-managers">PMs ({projectManagers.length})</TabsTrigger>
                 <TabsTrigger value="services">Services</TabsTrigger>
                 <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
                 <TabsTrigger value="team">Team</TabsTrigger>
@@ -700,10 +735,28 @@ const AdminDashboard = () => {
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
+                <Select onValueChange={(value) => assignPM(req.id, value)}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Assign PM" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectManagers.filter(pm => pm.is_available).map((pm) => (
+                      <SelectItem key={pm.id} value={pm.id}>{pm.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
                   <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="Update Status" />
                   </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
                   <SelectContent>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="in_progress">In Progress</SelectItem>

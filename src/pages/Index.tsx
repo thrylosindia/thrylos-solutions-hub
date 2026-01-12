@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import MainLayout from '@/components/layout/MainLayout';
 import { useRef, useState, useEffect } from "react";
 import { motion, useInView } from "framer-motion";
-import handPhone from "@/assets/thhands.webp"; // <-- change path if needed
 
 const Index = () => {
   const sectionRef = useRef(null);
@@ -103,25 +102,23 @@ const Index = () => {
             </h1>
           </motion.div>
 
-          {/* Phone */}
+          {/* Hero Center Content */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
             transition={{ duration: 1, delay: 0.2 }}
-            className="relative z-30"
+            className="relative z-30 flex flex-col items-center"
           >
-            {/* Time */}
-            <div className="absolute top-[4%] left-[61%] -translate-x-1/2 z-40">
-              <span className="text-white text-[5px] xs:text-[6px] sm:text-[8px] font-medium">
+            {/* Time Display */}
+            <div className="mb-4">
+              <span className="text-white/80 text-sm sm:text-base font-medium">
                 {indianTime}
               </span>
             </div>
 
-            <img
-              src={handPhone}
-              alt="Phone"
-              className="w-32 xs:w-44 sm:w-72 md:w-96 lg:w-[28rem] h-auto object-contain drop-shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
-            />
+            <div className="w-32 xs:w-44 sm:w-72 md:w-96 lg:w-[28rem] h-48 sm:h-72 md:h-96 flex items-center justify-center">
+              <div className="text-6xl sm:text-8xl md:text-9xl gradient-text font-bold">⚡</div>
+            </div>
           </motion.div>
 
           {/* TECH */}
