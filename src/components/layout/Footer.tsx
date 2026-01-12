@@ -1,89 +1,79 @@
 import { Link } from 'react-router-dom';
-import { Zap, Mail, Phone, MapPin } from 'lucide-react';
+import { Zap, Mail, Phone, MapPin, Heart } from 'lucide-react';
 
 const Footer = () => {
   return (
-    <footer className="bg-card border-t border-border">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                <Zap className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold gradient-text">THRYLOS</span>
+    <>
+      {/* Footer */}
+      <div className="bg-card border-t border-border py-12 col-span-full">
+        <div className="container mx-auto px-6 text-center">
+          <div className="mb-8">
+            <div className="flex items-center justify-center gap-3 mt-6">
+              <span className="text-lg text-white font-normal" style={{ fontFamily: 'taberna' }}>
+                A
+              </span>
+              <span
+                className="text-lg font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text"
+                style={{ fontFamily: "'Merlin', cursive" }}
+              >
+                misterutsav
+              </span>
+              <span className="text-lg text-white font-normal" style={{ fontFamily: 'taberna' }}>
+                PRODUCT
+              </span>
+              <Heart className="h-4 w-4 text-red-500 fill-red-500 animate-pulse" />
             </div>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-8 mb-8">
+            <a href="/home" className="text-foreground/60 hover:text-primary transition-colors">
+              Home
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/about" className="text-foreground/60 hover:text-primary transition-colors">
+              About
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/services" className="text-foreground/60 hover:text-primary transition-colors">
+              Services
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/portfolio" className="text-foreground/60 hover:text-primary transition-colors">
+              Portfolio
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/contact" className="text-foreground/60 hover:text-primary transition-colors">
+              Contact
+            </a>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-6 mb-8 text-sm">
+            <a href="https://careers.thrylos.in" className="text-foreground/60 hover:text-primary transition-colors">
+              Careers
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/privacy-policy" className="text-foreground/60 hover:text-primary transition-colors">
+              Privacy Policy
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/terms-of-service" className="text-foreground/60 hover:text-primary transition-colors">
+              Terms of Service
+            </a>
+            <span className="text-foreground/40">|</span>
+            <a href="/payment-policy" className="text-foreground/60 hover:text-primary transition-colors">
+              Payment Policy
+            </a>
+          </div>
+
+
+          <div className="border-t border-border pt-8">
             <p className="text-sm text-muted-foreground">
-              Transforming ideas into powerful digital solutions. Your trusted tech partner.
-            </p>
-          </div>
-
-          {/* Quick Links */}
-          <div>
-            <h4 className="font-semibold mb-4">Quick Links</h4>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link to="/about" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                  About Us
-                </Link>
-              </li>
-              <li>
-                <Link to="/services" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                  Services
-                </Link>
-              </li>
-              <li>
-                <Link to="/portfolio" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                  Portfolio
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Services */}
-          <div>
-            <h4 className="font-semibold mb-4">Services</h4>
-            <ul className="space-y-2">
-              <li className="text-sm text-muted-foreground">Web Development</li>
-              <li className="text-sm text-muted-foreground">Mobile Apps</li>
-              <li className="text-sm text-muted-foreground">Cloud Solutions</li>
-              <li className="text-sm text-muted-foreground">AI Integration</li>
-            </ul>
-          </div>
-
-          {/* Contact */}
-          <div>
-            <h4 className="font-semibold mb-4">Contact</h4>
-            <ul className="space-y-3">
-              <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="w-4 h-4 text-primary" />
-                contact@thrylos.tech
-              </li>
-              <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Phone className="w-4 h-4 text-primary" />
-                +91 123 456 7890
-              </li>
-              <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="w-4 h-4 text-primary" />
-                India
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="border-t border-border mt-8 pt-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} THRYLOS Tech. All rights reserved.
+            © {new Date().getFullYear()} THRYLOS. All rights reserved.
           </p>
+          </div>
         </div>
       </div>
-    </footer>
+    </>
   );
 };
 
