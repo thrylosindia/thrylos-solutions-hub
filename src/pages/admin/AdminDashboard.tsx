@@ -3,7 +3,7 @@ import { Navigate, Link } from 'react-router-dom';
 import { 
   FileText, Briefcase, Mail, Users, LogOut, Flame, CheckCircle,
   Plus, Edit, AlertTriangle, Trash2, Eye, X, Loader2, MessageSquare, Upload,
-  Clock
+  Clock, Phone, UserCheck, UserX
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +73,8 @@ interface ServiceRequest {
   company_name?: string;
   contact_email?: string;
   contact_phone?: string;
+  assigned_pm_id?: string | null;
+  pm_assigned_at?: string | null;
 }
 
 interface PortfolioItem {
@@ -124,7 +126,7 @@ interface ProjectManager {
 }
 
 const AdminDashboard = () => {
-  const { isAdminAuthenticated, adminLogout, loading: authLoading, getAdminToken } = useAdminAuth();
+  const { isAdminAuthenticated, adminLogout, loading: authLoading } = useAdminAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -142,9 +144,11 @@ const AdminDashboard = () => {
   const [portfolioDialog, setPortfolioDialog] = useState(false);
   const [teamDialog, setTeamDialog] = useState(false);
   const [responseDialog, setResponseDialog] = useState(false);
+  const [pmDialog, setPmDialog] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingPortfolio, setEditingPortfolio] = useState<PortfolioItem | null>(null);
   const [editingTeam, setEditingTeam] = useState<TeamMember | null>(null);
+  const [editingPM, setEditingPM] = useState<ProjectManager | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [adminResponseText, setAdminResponseText] = useState('');
 
@@ -162,6 +166,9 @@ const AdminDashboard = () => {
   });
   const [teamForm, setTeamForm] = useState({
     name: '', role: '', bio: '', image_url: '', order_index: 0, is_active: true
+  });
+  const [pmForm, setPmForm] = useState({
+    name: '', email: '', phone: '', specialization: '', is_available: true
   });
 
   useEffect(() => {
@@ -204,6 +211,25 @@ const AdminDashboard = () => {
       // Update PM availability
       await adminApi('update', 'project_managers', { data: { is_available: false }, id: pmId });
       toast({ title: 'Project Manager assigned' });
+      fetchRequests();
+      fetchProjectManagers();
+    } catch (error) {
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    }
+  };
+
+  const unassignPM = async (requestId: string, pmId: string) => {
+    try {
+      await adminApi('update', 'service_requests', { 
+        data: { assigned_pm_id: null, pm_assigned_at: null }, 
+        id: requestId 
+      });
+      // Check if PM has other assignments
+      const otherAssignments = requests.filter(r => r.assigned_pm_id === pmId && r.id !== requestId);
+      if (otherAssignments.length === 0) {
+        await adminApi('update', 'project_managers', { data: { is_available: true }, id: pmId });
+      }
+      toast({ title: 'Project Manager unassigned' });
       fetchRequests();
       fetchProjectManagers();
     } catch (error) {
@@ -434,12 +460,102 @@ const AdminDashboard = () => {
     setTeamDialog(true);
   };
 
+  // Project Manager CRUD
+  const handleSavePM = async () => {
+    try {
+      const payload = { ...pmForm };
+
+      if (editingPM) {
+        await adminApi('update', 'project_managers', { data: payload, id: editingPM.id });
+        toast({ title: 'Project Manager updated' });
+      } else {
+        await adminApi('insert', 'project_managers', { data: payload });
+        toast({ title: 'Project Manager added' });
+      }
+
+      setPmDialog(false);
+      setEditingPM(null);
+      setPmForm({ name: '', email: '', phone: '', specialization: '', is_available: true });
+      fetchProjectManagers();
+    } catch (error) {
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeletePM = async (id: string) => {
+    if (!confirm('Delete this project manager?')) return;
+    try {
+      await adminApi('delete', 'project_managers', { id });
+      toast({ title: 'Project Manager deleted' });
+      fetchProjectManagers();
+    } catch (error) {
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    }
+  };
+
+  const editProjectManager = (pm: ProjectManager) => {
+    setEditingPM(pm);
+    setPmForm({
+      name: pm.name,
+      email: pm.email,
+      phone: pm.phone || '',
+      specialization: pm.specialization || '',
+      is_available: pm.is_available,
+    });
+    setPmDialog(true);
+  };
+
+  const togglePMAvailability = async (pm: ProjectManager) => {
+    try {
+      await adminApi('update', 'project_managers', { 
+        data: { is_available: !pm.is_available }, 
+        id: pm.id 
+      });
+      toast({ title: `PM marked as ${pm.is_available ? 'busy' : 'available'}` });
+      fetchProjectManagers();
+    } catch (error) {
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    }
+  };
+
+  // Get assigned PM for a request
+  const getAssignedPM = (pmId: string | null | undefined) => {
+    if (!pmId) return null;
+    return projectManagers.find(pm => pm.id === pmId);
+  };
+
+  // Get projects assigned to a PM
+  const getPMProjects = (pmId: string) => {
+    return requests.filter(r => r.assigned_pm_id === pmId);
+  };
+
   // Request management
   const updateRequestStatus = async (id: string, status: string) => {
     try {
       await adminApi('update', 'service_requests', { data: { status }, id });
+      
+      // If completed or cancelled, free up the PM
+      if (status === 'completed' || status === 'cancelled') {
+        const request = requests.find(r => r.id === id);
+        if (request?.assigned_pm_id) {
+          const otherActiveAssignments = requests.filter(
+            r => r.assigned_pm_id === request.assigned_pm_id && 
+                 r.id !== id && 
+                 r.status !== 'completed' && 
+                 r.status !== 'cancelled'
+          );
+          if (otherActiveAssignments.length === 0) {
+            await adminApi('update', 'project_managers', { 
+              data: { is_available: true }, 
+              id: request.assigned_pm_id 
+            });
+          }
+        }
+      }
+      
       toast({ title: 'Status updated' });
       fetchRequests();
+      fetchProjectManagers();
     } catch (error) {
       toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
     }
@@ -516,6 +632,8 @@ const AdminDashboard = () => {
     activeServices: services.filter(s => s.is_active).length,
     unreadMessages: messages.filter(m => !m.is_read).length,
     teamMembers: teamMembers.filter(t => t.is_active).length,
+    availablePMs: projectManagers.filter(pm => pm.is_available).length,
+    totalPMs: projectManagers.length,
   };
 
   return (
@@ -524,18 +642,18 @@ const AdminDashboard = () => {
       <header className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-              <img
-                src="/thrylosindia.png"
-                alt="Thrylos logo"
-                className="w-6 h-6 object-contain rounded-sm"
-                loading="lazy"
-              />
+            <img
+              src="/thrylosindia.png"
+              alt="Thrylos logo"
+              className="w-6 h-6 object-contain rounded-sm"
+              loading="lazy"
+            />
             <div
-        className="text-2xl font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text cursor-pointer"
-        style={{ fontFamily: "'Nixmat', sans-serif" }}
-      >
-        THRYLOS ADMIN
-      </div>
+              className="text-2xl font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text cursor-pointer"
+              style={{ fontFamily: "'Nixmat', sans-serif" }}
+            >
+              THRYLOS ADMIN
+            </div>
           </Link>
           <Button variant="ghost" size="sm" onClick={adminLogout}>
             <LogOut className="w-4 h-4 mr-2" />
@@ -552,7 +670,7 @@ const AdminDashboard = () => {
         ) : (
           <>
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
               <Card className="glass-card">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
@@ -608,6 +726,17 @@ const AdminDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
+              <Card className="glass-card">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <UserCheck className="w-8 h-8 text-teal-500" />
+                    <div>
+                      <p className="text-2xl font-bold">{stats.availablePMs}/{stats.totalPMs}</p>
+                      <p className="text-xs text-muted-foreground">PMs Free</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Tabs */}
@@ -644,18 +773,20 @@ const AdminDashboard = () => {
                     </CardContent>
                   </Card>
                   <Card className="glass-card">
-                    <CardHeader><CardTitle className="text-lg">Recent Messages</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-lg">Project Managers</CardTitle></CardHeader>
                     <CardContent>
-                      {messages.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No messages yet</p>
+                      {projectManagers.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No project managers yet</p>
                       ) : (
-                        messages.slice(0, 5).map((msg) => (
-                          <div key={msg.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                        projectManagers.slice(0, 5).map((pm) => (
+                          <div key={pm.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
                             <div>
-                              <p className="font-medium text-sm">{msg.name}</p>
-                              <p className="text-xs text-muted-foreground truncate max-w-[200px]">{msg.subject || msg.message}</p>
+                              <p className="font-medium text-sm">{pm.name}</p>
+                              <p className="text-xs text-muted-foreground">{pm.specialization || pm.email}</p>
                             </div>
-                            {!msg.is_read && <Badge className="bg-primary">New</Badge>}
+                            <Badge variant={pm.is_available ? 'default' : 'secondary'}>
+                              {pm.is_available ? 'Available' : 'Busy'}
+                            </Badge>
                           </div>
                         ))
                       )}
@@ -665,200 +796,368 @@ const AdminDashboard = () => {
               </TabsContent>
 
               {/* Requests Tab */}
-<TabsContent value="requests">
-  <div className="space-y-4">
-    {requests.length === 0 ? (
-      <Card className="glass-card">
-        <CardContent className="py-12 text-center">
-          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">No service requests yet</p>
-        </CardContent>
-      </Card>
-    ) : (
-      requests.map((req) => (
-        <Card
-          key={req.id}
-          className="glass-card border border-border/50 hover:border-border transition"
-        >
-          <CardContent className="p-6 space-y-5">
+              <TabsContent value="requests">
+                <div className="space-y-4">
+                  {requests.length === 0 ? (
+                    <Card className="glass-card">
+                      <CardContent className="py-12 text-center">
+                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No service requests yet</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    requests.map((req) => {
+                      const assignedPM = getAssignedPM(req.assigned_pm_id);
+                      return (
+                        <Card key={req.id} className="glass-card border border-border/50 hover:border-border transition">
+                          <CardContent className="p-6 space-y-5">
+                            {/* Header */}
+                            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+                              {/* Left: Project Info */}
+                              <div className="flex-1 space-y-4">
+                                {/* Title Box */}
+                                <div className="bg-muted/30 border border-border/50 rounded-lg p-4 space-y-1">
+                                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Project Title</p>
+                                  <h3 className="text-lg font-semibold">{req.title}</h3>
+                                </div>
 
-            {/* Header */}
-<div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+                                {/* Description Box */}
+                                <div className="bg-muted/30 border border-border/50 rounded-lg p-4 space-y-1">
+                                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Project Description</p>
+                                  <p className="text-sm leading-relaxed">{req.description}</p>
+                                </div>
 
-  {/* Left: Project Info */}
-  <div className="flex-1 space-y-4">
+                                {/* Status + Priority */}
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
+                                    {req.status === "in_progress" && <Loader2 className="w-3 h-3 animate-spin" />}
+                                    {req.status === "pending" && <Clock className="w-3 h-3 text-yellow-500" />}
+                                    {req.status === "cancelled" && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                                    {req.status === "completed" && <CheckCircle className="w-3 h-3 text-green-500" />}
+                                    {req.status.replace(/_/g, " ")}
+                                  </Badge>
+                                  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
+                                    {req.priority === "high" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
+                                    {req.priority} priority
+                                  </Badge>
+                                </div>
 
-    {/* Title Box */}
-    <div className="bg-muted/30 border border-border/50 rounded-lg p-4 space-y-1">
-      <p className="text-xs text-muted-foreground uppercase tracking-wide">
-        Project Title
-      </p>
-      <h3 className="text-lg font-semibold">
-        {req.title}
-      </h3>
-    </div>
+                                {/* Assigned PM */}
+                                {assignedPM && (
+                                  <div className="bg-teal-500/10 border border-teal-500/30 rounded-lg p-4 space-y-2">
+                                    <p className="text-xs text-teal-400 uppercase tracking-wide flex items-center gap-2">
+                                      <UserCheck className="w-4 h-4" /> Assigned Project Manager
+                                    </p>
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="font-semibold">{assignedPM.name}</p>
+                                        <p className="text-sm text-muted-foreground">{assignedPM.email}</p>
+                                        {assignedPM.phone && (
+                                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                            <Phone className="w-3 h-3" /> {assignedPM.phone}
+                                          </p>
+                                        )}
+                                        {assignedPM.specialization && (
+                                          <p className="text-xs text-muted-foreground mt-1">{assignedPM.specialization}</p>
+                                        )}
+                                      </div>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline" 
+                                        onClick={() => unassignPM(req.id, assignedPM.id)}
+                                      >
+                                        <X className="w-4 h-4 mr-1" /> Unassign
+                                      </Button>
+                                    </div>
+                                    {req.pm_assigned_at && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Assigned on {new Date(req.pm_assigned_at).toLocaleDateString()}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
 
-    {/* Description Box */}
-    <div className="bg-muted/30 border border-border/50 rounded-lg p-4 space-y-1">
-      <p className="text-xs text-muted-foreground uppercase tracking-wide">
-        Project Description
-      </p>
-      <p className="text-sm leading-relaxed">
-        {req.description}
-      </p>
-    </div>
+                              {/* Actions */}
+                              <div className="flex flex-wrap gap-2">
+                                {!assignedPM && (
+                                  <Select onValueChange={(value) => assignPM(req.id, value)}>
+                                    <SelectTrigger className="w-[160px]">
+                                      <SelectValue placeholder="Assign PM" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {projectManagers.filter(pm => pm.is_available).length === 0 ? (
+                                        <SelectItem value="none" disabled>No PMs available</SelectItem>
+                                      ) : (
+                                        projectManagers.filter(pm => pm.is_available).map((pm) => (
+                                          <SelectItem key={pm.id} value={pm.id}>{pm.name}</SelectItem>
+                                        ))
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                )}
 
-    {/* Status + Priority */}
-    <div className="flex flex-wrap gap-2">
-  {/* Status */}
-  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
-    {req.status === "in_progress" && <Loader2 className="w-3 h-3 animate-spin" />}
-    {req.status === "pending" && <Clock className="w-3 h-3 text-yellow-500" />}
-    {req.status === "cancelled" && <AlertTriangle className="w-3 h-3 text-red-500" />}
-    {req.status === "completed" && <CheckCircle className="w-3 h-3 text-green-500" />}
-    {req.status.replace(/_/g, " ")}
-  </Badge>
+                                <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
+                                  <SelectTrigger className="w-[160px]">
+                                    <SelectValue placeholder="Update Status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                  </SelectContent>
+                                </Select>
 
-  {/* Priority */}
-  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
-    {req.priority === "high" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
-    {req.priority}
-  </Badge>
-  <Badge className="capitalize flex items-center gap-1 bg-muted/40 border">
-  {req.priority === "medium" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
-  {req.priority}
-  </Badge>
-</div>
+                                <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
+                                  <MessageSquare className="w-4 h-4 mr-1" />
+                                  Respond
+                                </Button>
 
-  </div>
+                                <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
 
+                            {/* Divider */}
+                            <div className="h-px bg-border/50" />
 
-              {/* Actions */}
-              <div className="flex flex-wrap gap-2">
-                <Select onValueChange={(value) => assignPM(req.id, value)}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="Assign PM" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectManagers.filter(pm => pm.is_available).map((pm) => (
-                      <SelectItem key={pm.id} value={pm.id}>{pm.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                            {/* Request Details */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                              {req.service_type && (
+                                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                                  <p className="text-xs text-muted-foreground">Service Type</p>
+                                  <p className="font-medium capitalize">{req.service_type.replace(/_/g, ' ')}</p>
+                                </div>
+                              )}
+                              {req.color_theme && (
+                                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                                  <p className="text-xs text-muted-foreground">Theme</p>
+                                  <p className="font-medium">{req.color_theme}</p>
+                                </div>
+                              )}
+                              {req.budget_range && (
+                                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                                  <p className="text-xs text-muted-foreground">Budget</p>
+                                  <p className="font-medium capitalize">{req.budget_range.replace(/_/g, ' ')}</p>
+                                </div>
+                              )}
+                              {req.timeline && (
+                                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
+                                  <p className="text-xs text-muted-foreground">Timeline</p>
+                                  <p className="font-medium capitalize">{req.timeline.replace(/_/g, ' ')}</p>
+                                </div>
+                              )}
+                            </div>
 
-                <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="Update Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+                            {/* Client Info */}
+                            <div className="bg-muted/30 p-4 rounded-lg space-y-1 text-sm">
+                              <p>
+                                <span className="text-muted-foreground">Client:</span>{" "}
+                                <span className="font-medium">{req.user_name}</span>{" "}
+                                <span className="text-muted-foreground">({req.user_email})</span>
+                              </p>
+                              {req.company_name && (
+                                <p>
+                                  <span className="text-muted-foreground">Company:</span>{" "}
+                                  {req.company_name}
+                                </p>
+                              )}
+                              {req.contact_phone && (
+                                <p>
+                                  <span className="text-muted-foreground">Phone:</span>{" "}
+                                  {req.contact_phone}
+                                </p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                Submitted on {new Date(req.created_at).toLocaleString()}
+                              </p>
+                            </div>
 
-                <Button size="sm" variant="outline" onClick={() => openResponseDialog(req)}>
-                  <MessageSquare className="w-4 h-4 mr-1" />
-                  Respond
-                </Button>
-
-                <Button size="sm" variant="ghost" onClick={() => deleteRequest(req.id)}>
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="h-px bg-border/50" />
-
-            {/* Request Details */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              {req.service_type && (
-                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
-                  <p className="text-xs text-muted-foreground">Service Type</p>
-                  <p className="font-medium capitalize">
-                    {req.service_type.replace(/_/g, ' ')}
-                  </p>
+                            {/* Admin Response */}
+                            {req.admin_response && (
+                              <div className="border border-border/50 bg-muted/40 p-4 rounded-lg">
+                                <p className="text-xs text-muted-foreground mb-1">Your Response</p>
+                                <p className="text-sm leading-relaxed">{req.admin_response}</p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
                 </div>
-              )}
+              </TabsContent>
 
-              {req.color_theme && (
-                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
-                  <p className="text-xs text-muted-foreground">Theme</p>
-                  <p className="font-medium">{req.color_theme}</p>
+              {/* Project Managers Tab */}
+              <TabsContent value="project-managers">
+                <div className="flex justify-end mb-4">
+                  <Dialog open={pmDialog} onOpenChange={setPmDialog}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-primary hover:bg-primary/90" onClick={() => {
+                        setEditingPM(null);
+                        setPmForm({ name: '', email: '', phone: '', specialization: '', is_available: true });
+                      }}>
+                        <Plus className="w-4 h-4 mr-2" />Add Project Manager
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="glass-card border-border max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>{editingPM ? 'Edit Project Manager' : 'Add New Project Manager'}</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 mt-4">
+                        <div>
+                          <Label>Name *</Label>
+                          <Input 
+                            value={pmForm.name} 
+                            onChange={(e) => setPmForm({ ...pmForm, name: e.target.value })} 
+                            placeholder="John Doe"
+                          />
+                        </div>
+                        <div>
+                          <Label>Email *</Label>
+                          <Input 
+                            type="email"
+                            value={pmForm.email} 
+                            onChange={(e) => setPmForm({ ...pmForm, email: e.target.value })} 
+                            placeholder="john@example.com"
+                          />
+                        </div>
+                        <div>
+                          <Label>Phone</Label>
+                          <Input 
+                            value={pmForm.phone} 
+                            onChange={(e) => setPmForm({ ...pmForm, phone: e.target.value })} 
+                            placeholder="+91 98765 43210"
+                          />
+                        </div>
+                        <div>
+                          <Label>Specialization</Label>
+                          <Select value={pmForm.specialization} onValueChange={(value) => setPmForm({ ...pmForm, specialization: value })}>
+                            <SelectTrigger><SelectValue placeholder="Select specialization" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Web Development">Web Development</SelectItem>
+                              <SelectItem value="Mobile Apps">Mobile Apps</SelectItem>
+                              <SelectItem value="E-commerce">E-commerce</SelectItem>
+                              <SelectItem value="AI/ML">AI/ML</SelectItem>
+                              <SelectItem value="Cloud Solutions">Cloud Solutions</SelectItem>
+                              <SelectItem value="UI/UX Design">UI/UX Design</SelectItem>
+                              <SelectItem value="General">General</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch 
+                            checked={pmForm.is_available} 
+                            onCheckedChange={(checked) => setPmForm({ ...pmForm, is_available: checked })} 
+                          />
+                          <Label>Available for new projects</Label>
+                        </div>
+                        <Button 
+                          onClick={handleSavePM} 
+                          className="w-full bg-primary"
+                          disabled={!pmForm.name || !pmForm.email}
+                        >
+                          Save Project Manager
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-              )}
 
-              {req.budget_range && (
-                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
-                  <p className="text-xs text-muted-foreground">Budget</p>
-                  <p className="font-medium capitalize">
-                    {req.budget_range.replace(/_/g, ' ')}
-                  </p>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {projectManagers.length === 0 ? (
+                    <Card className="glass-card col-span-full">
+                      <CardContent className="py-12 text-center">
+                        <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No project managers yet</p>
+                        <p className="text-sm text-muted-foreground mt-1">Add your first PM to start assigning projects</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    projectManagers.map((pm) => {
+                      const pmProjects = getPMProjects(pm.id);
+                      const activeProjects = pmProjects.filter(p => p.status !== 'completed' && p.status !== 'cancelled');
+                      
+                      return (
+                        <Card key={pm.id} className={`glass-card ${!pm.is_available ? 'border-yellow-500/30' : 'border-green-500/30'}`}>
+                          <CardContent className="p-6">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${pm.is_available ? 'bg-green-500/20' : 'bg-yellow-500/20'}`}>
+                                  {pm.is_available ? (
+                                    <UserCheck className="w-6 h-6 text-green-500" />
+                                  ) : (
+                                    <UserX className="w-6 h-6 text-yellow-500" />
+                                  )}
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold">{pm.name}</h3>
+                                  <Badge variant={pm.is_available ? 'default' : 'secondary'} className="mt-1">
+                                    {pm.is_available ? 'Available' : 'Busy'}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button size="icon" variant="ghost" onClick={() => editProjectManager(pm)}>
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" onClick={() => handleDeletePM(pm.id)}>
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2 text-sm">
+                              <p className="flex items-center gap-2 text-muted-foreground">
+                                <Mail className="w-4 h-4" /> {pm.email}
+                              </p>
+                              {pm.phone && (
+                                <p className="flex items-center gap-2 text-muted-foreground">
+                                  <Phone className="w-4 h-4" /> {pm.phone}
+                                </p>
+                              )}
+                              {pm.specialization && (
+                                <p className="flex items-center gap-2 text-muted-foreground">
+                                  <Briefcase className="w-4 h-4" /> {pm.specialization}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-border">
+                              <p className="text-xs text-muted-foreground mb-2">
+                                Active Projects: {activeProjects.length}
+                              </p>
+                              {activeProjects.length > 0 && (
+                                <div className="space-y-1">
+                                  {activeProjects.slice(0, 3).map(project => (
+                                    <div key={project.id} className="text-xs bg-muted/40 p-2 rounded">
+                                      {project.title}
+                                    </div>
+                                  ))}
+                                  {activeProjects.length > 3 && (
+                                    <p className="text-xs text-muted-foreground">+{activeProjects.length - 3} more</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full mt-4"
+                              onClick={() => togglePMAvailability(pm)}
+                            >
+                              Mark as {pm.is_available ? 'Busy' : 'Available'}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
                 </div>
-              )}
-
-              {req.timeline && (
-                <div className="bg-muted/40 p-3 rounded-lg space-y-1">
-                  <p className="text-xs text-muted-foreground">Timeline</p>
-                  <p className="font-medium capitalize">
-                    {req.timeline.replace(/_/g, ' ')}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Client Info */}
-            <div className="bg-muted/30 p-4 rounded-lg space-y-1 text-sm">
-              <p>
-                <span className="text-muted-foreground">Client:</span>{" "}
-                <span className="font-medium">{req.user_name}</span>{" "}
-                <span className="text-muted-foreground">({req.user_email})</span>
-              </p>
-
-              {req.company_name && (
-                <p>
-                  <span className="text-muted-foreground">Company:</span>{" "}
-                  {req.company_name}
-                </p>
-              )}
-
-              {req.contact_phone && (
-                <p>
-                  <span className="text-muted-foreground">Phone:</span>{" "}
-                  {req.contact_phone}
-                </p>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                Submitted on {new Date(req.created_at).toLocaleString()}
-              </p>
-            </div>
-
-            {/* Admin Response */}
-            {req.admin_response && (
-              <div className="border border-border/50 bg-muted/40 p-4 rounded-lg">
-                <p className="text-xs text-muted-foreground mb-1">Your Response</p>
-                <p className="text-sm leading-relaxed">
-                  {req.admin_response}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))
-    )}
-  </div>
-</TabsContent>
-
+              </TabsContent>
 
               {/* Services Tab */}
               <TabsContent value="services">
