@@ -156,6 +156,7 @@ export type Database = {
           id: string
           is_available: boolean
           name: string
+          password_hash: string | null
           phone: string | null
           specialization: string | null
           updated_at: string
@@ -166,6 +167,7 @@ export type Database = {
           id?: string
           is_available?: boolean
           name: string
+          password_hash?: string | null
           phone?: string | null
           specialization?: string | null
           updated_at?: string
@@ -176,6 +178,7 @@ export type Database = {
           id?: string
           is_available?: boolean
           name?: string
+          password_hash?: string | null
           phone?: string | null
           specialization?: string | null
           updated_at?: string

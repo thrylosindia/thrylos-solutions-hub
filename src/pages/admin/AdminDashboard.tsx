@@ -168,7 +168,7 @@ const AdminDashboard = () => {
     name: '', role: '', bio: '', image_url: '', order_index: 0, is_active: true
   });
   const [pmForm, setPmForm] = useState({
-    name: '', email: '', phone: '', specialization: '', is_available: true
+    name: '', email: '', phone: '', specialization: '', is_available: true, password: ''
   });
 
   useEffect(() => {
@@ -463,19 +463,43 @@ const AdminDashboard = () => {
   // Project Manager CRUD
   const handleSavePM = async () => {
     try {
-      const payload = { ...pmForm };
+      // Hash password for new PM
+      const hashPassword = async (pwd: string): Promise<string> => {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(pwd + 'thrylos_salt_2024');
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      };
+
+      const payload: Record<string, unknown> = {
+        name: pmForm.name,
+        email: pmForm.email.toLowerCase(),
+        phone: pmForm.phone,
+        specialization: pmForm.specialization,
+        is_available: pmForm.is_available,
+      };
+
+      // Add password hash if password is provided
+      if (pmForm.password) {
+        payload.password_hash = await hashPassword(pmForm.password);
+      }
 
       if (editingPM) {
         await adminApi('update', 'project_managers', { data: payload, id: editingPM.id });
         toast({ title: 'Project Manager updated' });
       } else {
+        if (!pmForm.password) {
+          toast({ title: 'Error', description: 'Password is required for new PM', variant: 'destructive' });
+          return;
+        }
         await adminApi('insert', 'project_managers', { data: payload });
-        toast({ title: 'Project Manager added' });
+        toast({ title: 'Project Manager added', description: 'They can now login at /pm/login' });
       }
 
       setPmDialog(false);
       setEditingPM(null);
-      setPmForm({ name: '', email: '', phone: '', specialization: '', is_available: true });
+      setPmForm({ name: '', email: '', phone: '', specialization: '', is_available: true, password: '' });
       fetchProjectManagers();
     } catch (error) {
       toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
@@ -501,6 +525,7 @@ const AdminDashboard = () => {
       phone: pm.phone || '',
       specialization: pm.specialization || '',
       is_available: pm.is_available,
+      password: '', // Don't show existing password
     });
     setPmDialog(true);
   };
@@ -997,7 +1022,7 @@ const AdminDashboard = () => {
                     <DialogTrigger asChild>
                       <Button className="bg-primary hover:bg-primary/90" onClick={() => {
                         setEditingPM(null);
-                        setPmForm({ name: '', email: '', phone: '', specialization: '', is_available: true });
+                        setPmForm({ name: '', email: '', phone: '', specialization: '', is_available: true, password: '' });
                       }}>
                         <Plus className="w-4 h-4 mr-2" />Add Project Manager
                       </Button>
@@ -1046,6 +1071,15 @@ const AdminDashboard = () => {
                               <SelectItem value="General">General</SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
+                        <div>
+                          <Label>{editingPM ? 'New Password (leave blank to keep current)' : 'Password *'}</Label>
+                          <Input 
+                            type="password"
+                            value={pmForm.password} 
+                            onChange={(e) => setPmForm({ ...pmForm, password: e.target.value })} 
+                            placeholder="••••••••"
+                          />
                         </div>
                         <div className="flex items-center gap-2">
                           <Switch 
