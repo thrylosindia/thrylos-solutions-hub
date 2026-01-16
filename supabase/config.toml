@@ -1,5 +1,8 @@
 project_id = "xywmgradzlzrhuxnbbag"
 
+[functions.pm-auth]
+verify_jwt = false
+
 [functions.admin-api]
 verify_jwt = false
 
