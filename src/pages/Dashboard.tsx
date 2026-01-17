@@ -368,14 +368,11 @@ const getStatusIcon = (status: string) => {
                         <SelectValue placeholder="Select service type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="web_development">Web Development</SelectItem>
-                        <SelectItem value="mobile_app">Mobile App Development</SelectItem>
-                        <SelectItem value="ecommerce">E-commerce Solution</SelectItem>
-                        <SelectItem value="ui_ux_design">UI/UX Design</SelectItem>
-                        <SelectItem value="cloud_solutions">Cloud Solutions</SelectItem>
-                        <SelectItem value="ai_ml">AI/ML Development</SelectItem>
-                        <SelectItem value="custom_software">Custom Software</SelectItem>
-                        <SelectItem value="maintenance">Maintenance & Support</SelectItem>
+                        {services.map((service) => (
+                          <SelectItem key={service.id} value={service.title}>
+                            {service.title}
+                          </SelectItem>
+                        ))}
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
