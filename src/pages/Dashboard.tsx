@@ -368,14 +368,11 @@ const getStatusIcon = (status: string) => {
                         <SelectValue placeholder="Select service type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="web_development">Web Development</SelectItem>
-                        <SelectItem value="mobile_app">Mobile App Development</SelectItem>
-                        <SelectItem value="ecommerce">E-commerce Solution</SelectItem>
-                        <SelectItem value="ui_ux_design">UI/UX Design</SelectItem>
-                        <SelectItem value="cloud_solutions">Cloud Solutions</SelectItem>
-                        <SelectItem value="ai_ml">AI/ML Development</SelectItem>
-                        <SelectItem value="custom_software">Custom Software</SelectItem>
-                        <SelectItem value="maintenance">Maintenance & Support</SelectItem>
+                        {services.map((service) => (
+                          <SelectItem key={service.id} value={service.title}>
+                            {service.title}
+                          </SelectItem>
+                        ))}
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
@@ -431,12 +428,12 @@ const getStatusIcon = (status: string) => {
                         <SelectValue placeholder="Select budget range" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="under_1k">Under ₹1,000</SelectItem>
-                        <SelectItem value="1k_2k">₹1,000 - ₹2,000</SelectItem>
-                        <SelectItem value="2k_5k">₹2,000 - ₹5,000</SelectItem>
-                        <SelectItem value="5k_10k">₹5,000 - ₹10,000</SelectItem>
-                        <SelectItem value="10k_15k">₹10,000 - ₹15,000</SelectItem>
-                        <SelectItem value="above_15k">Above ₹15,000</SelectItem>
+                        <SelectItem value="under_25k">Under ₹1,000</SelectItem>
+                        <SelectItem value="25k_50k">₹1,000 - ₹2,000</SelectItem>
+                        <SelectItem value="50k_1lac">₹2,000 - ₹5,000</SelectItem>
+                        <SelectItem value="1lac_3lac">₹5,000 - ₹10,000</SelectItem>
+                        <SelectItem value="3lac_5lac">₹10,000 - ₹15,000</SelectItem>
+                        <SelectItem value="above_5lac">Above ₹15,000</SelectItem>
                         <SelectItem value="flexible">Flexible</SelectItem>
                       </SelectContent>
                     </Select>
