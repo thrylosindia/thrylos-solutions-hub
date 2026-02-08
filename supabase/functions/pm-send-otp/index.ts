@@ -10,19 +10,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface SendOTPRequest {
-  email: string;
-  fullName?: string;
-  isSignup?: boolean;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { email, fullName, isSignup } = (await req.json()) as SendOTPRequest;
+    const { email } = await req.json();
 
     if (!email || !email.includes("@")) {
       return new Response(
@@ -33,26 +27,28 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if user exists for login flow
-    if (!isSignup) {
-      const { data: existingUser } = await supabase.auth.admin.listUsers();
-      const userExists = existingUser?.users?.some(u => u.email === email);
-      if (!userExists) {
-        return new Response(
-          JSON.stringify({ error: "No account found with this email. Please sign up first." }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    // Check if PM exists with this email
+    const { data: pm, error: pmError } = await supabase
+      .from("project_managers")
+      .select("id, name, email")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (pmError || !pm) {
+      return new Response(
+        JSON.stringify({ error: "No project manager found with this email" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     // Delete existing OTPs for this email
     await supabase.from("otp_verifications").delete().eq("email", email);
 
-    // Store OTP in database
+    // Store OTP
     const { error: insertError } = await supabase.from("otp_verifications").insert({
       email,
       otp_code: otp,
@@ -65,8 +61,9 @@ serve(async (req) => {
       throw new Error("Failed to generate OTP");
     }
 
-    const username = fullName || email.split('@')[0];
+    const username = pm.name || "Project Manager";
 
+    // Send OTP email with branded template
     const emailHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -86,37 +83,58 @@ serve(async (req) => {
 </tr>
 <tr>
 <td align="center" style="padding-top:30px;">
+<div style="width:80px;height:80px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;margin:0 auto;">
 <img src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username)}&backgroundColor=4f7cff&textColor=ffffff" alt="Profile" width="80" style="display:block;border-radius:50%;">
+</div>
 </td>
 </tr>
 <tr>
 <td align="center" style="padding:20px 20px 10px 20px;">
-<h1 style="font-size:32px; margin:0; font-weight:800;">${isSignup ? `Welcome ${username}!` : `Welcome back ${username}!`}</h1>
+<h1 style="font-size:32px; margin:0; font-weight:800;">Welcome back ${username}!</h1>
 </td>
 </tr>
 <tr>
 <td align="center">
-<table width="90%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;border-radius:16px;">
+<table width="90%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;border-radius:16px;padding:20px;">
 <tr>
 <td style="padding:20px;">
 <table width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="font-size:16px;color:#555;padding-bottom:8px;">Logging in to</td></tr>
-<tr><td>
-<table width="100%"><tr>
-<td style="font-size:16px;font-weight:bold;">THRYLOS</td>
-<td align="right"><img src="https://github.com/user-attachments/assets/eea77779-ee10-4d58-bf62-e374dff4a6ab" width="44" style="display:block;border-radius:6px;"></td>
-</tr></table>
-</td></tr>
-<tr><td style="border-top:1px solid #ddd;padding-top:12px;padding-bottom:8px;"></td></tr>
-<tr><td style="font-size:16px;color:#555;padding-bottom:8px;">From</td></tr>
-<tr><td>
-<table width="100%"><tr>
-<td style="font-size:16px;font-weight:bold;">India</td>
-<td align="right"><img src="https://github.com/user-attachments/assets/3738239c-dc89-4d91-b96d-c845c2adcf64" width="35" style="display:block;border-radius:6px;"></td>
-</tr></table>
-</td></tr>
+<tr>
+<td style="font-size:16px;color:#555;padding-bottom:8px;">Logging in to</td>
+</tr>
+<tr>
+<td>
+<table width="100%">
+<tr>
+<td style="font-size:16px;font-weight:bold;">THRYLOS PM Portal</td>
+<td align="right">
+<img src="https://github.com/user-attachments/assets/eea77779-ee10-4d58-bf62-e374dff4a6ab" width="44" style="display:block;border-radius:6px;">
+</td>
+</tr>
 </table>
-</td></tr>
+</td>
+</tr>
+<tr>
+<td style="border-top:1px solid #ddd;padding-top:12px;padding-bottom:8px;"></td>
+</tr>
+<tr>
+<td style="font-size:16px;color:#555;padding-bottom:8px;">From</td>
+</tr>
+<tr>
+<td>
+<table width="100%">
+<tr>
+<td style="font-size:16px;font-weight:bold;">India</td>
+<td align="right">
+<img src="https://github.com/user-attachments/assets/3738239c-dc89-4d91-b96d-c845c2adcf64" width="35" style="display:block;border-radius:6px;">
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -139,10 +157,14 @@ If you didn't request to log in to your THRYLOS ID, you can safely ignore this e
 </tr>
 <tr>
 <td bgcolor="#000000" style="padding:20px;">
-<table width="100%"><tr>
-<td style="color:#ffffff;font-size:14px;">&copy; ${new Date().getFullYear()} THRYLOS. All rights reserved.</td>
-<td align="right"><img src="https://github.com/user-attachments/assets/160c433a-e006-42ee-8923-f6360223e116" width="90"></td>
-</tr></table>
+<table width="100%">
+<tr>
+<td style="color:#ffffff;font-size:14px;">&copy; 2026 THRYLOS. All rights reserved.</td>
+<td align="right">
+<img src="https://github.com/user-attachments/assets/160c433a-e006-42ee-8923-f6360223e116" width="90">
+</td>
+</tr>
+</table>
 </td>
 </tr>
 </table>
@@ -161,7 +183,7 @@ If you didn't request to log in to your THRYLOS ID, you can safely ignore this e
       body: JSON.stringify({
         from: "THRYLOS <noreply@thrylosindia.in>",
         to: [email],
-        subject: isSignup ? "Welcome to THRYLOS - Verify Your Email" : "Your THRYLOS Login Code",
+        subject: "Your THRYLOS PM Login Code",
         html: emailHtml,
       }),
     });
@@ -172,15 +194,14 @@ If you didn't request to log in to your THRYLOS ID, you can safely ignore this e
       throw new Error("Failed to send email");
     }
 
-    const emailResult = await emailResponse.json();
-    console.log("OTP email sent:", emailResult);
+    console.log("PM OTP email sent to:", email);
 
     return new Response(
-      JSON.stringify({ success: true, message: "OTP sent successfully" }),
+      JSON.stringify({ success: true, message: "OTP sent successfully", pmName: pm.name }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
-    console.error("Error in send-otp function:", error);
+    console.error("Error in pm-send-otp:", error);
     const message = error instanceof Error ? error.message : "Failed to send OTP";
     return new Response(
       JSON.stringify({ error: message }),

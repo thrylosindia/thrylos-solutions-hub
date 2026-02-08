@@ -5,6 +5,7 @@ import {
   Plus, Edit, AlertTriangle, Trash2, Eye, X, Loader2, MessageSquare, Upload,
   Clock, Phone, UserCheck, UserX
 } from 'lucide-react';
+import AnalyticsCharts from '@/components/admin/AnalyticsCharts';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -670,7 +671,7 @@ const AdminDashboard = () => {
         ) : (
           <>
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
               <Card className="glass-card">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
@@ -741,7 +742,7 @@ const AdminDashboard = () => {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="mb-6 flex-wrap">
+              <TabsList className="mb-6 flex flex-wrap gap-1 h-auto">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="requests">Requests ({requests.length})</TabsTrigger>
                 <TabsTrigger value="project-managers">PMs ({projectManagers.length})</TabsTrigger>
@@ -751,47 +752,51 @@ const AdminDashboard = () => {
                 <TabsTrigger value="messages">Messages</TabsTrigger>
               </TabsList>
 
-              {/* Overview */}
               <TabsContent value="overview">
-                <div className="grid md:grid-cols-2 gap-6">
-                  <Card className="glass-card">
-                    <CardHeader><CardTitle className="text-lg">Recent Requests</CardTitle></CardHeader>
-                    <CardContent>
-                      {requests.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No requests yet</p>
-                      ) : (
-                        requests.slice(0, 5).map((req) => (
-                          <div key={req.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                            <div>
-                              <p className="font-medium text-sm">{req.title}</p>
-                              <p className="text-xs text-muted-foreground">{req.user_email}</p>
+                <div className="space-y-6">
+                  {/* Analytics Charts */}
+                  <AnalyticsCharts requests={requests} projectManagers={projectManagers} />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card className="glass-card">
+                      <CardHeader><CardTitle className="text-lg">Recent Requests</CardTitle></CardHeader>
+                      <CardContent>
+                        {requests.length === 0 ? (
+                          <p className="text-muted-foreground text-sm">No requests yet</p>
+                        ) : (
+                          requests.slice(0, 5).map((req) => (
+                            <div key={req.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{req.title}</p>
+                                <p className="text-xs text-muted-foreground truncate">{req.user_email}</p>
+                              </div>
+                              <Badge variant="outline" className="ml-2 flex-shrink-0">{req.status}</Badge>
                             </div>
-                            <Badge variant="outline">{req.status}</Badge>
-                          </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-                  <Card className="glass-card">
-                    <CardHeader><CardTitle className="text-lg">Project Managers</CardTitle></CardHeader>
-                    <CardContent>
-                      {projectManagers.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No project managers yet</p>
-                      ) : (
-                        projectManagers.slice(0, 5).map((pm) => (
-                          <div key={pm.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                            <div>
-                              <p className="font-medium text-sm">{pm.name}</p>
-                              <p className="text-xs text-muted-foreground">{pm.specialization || pm.email}</p>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card className="glass-card">
+                      <CardHeader><CardTitle className="text-lg">Project Managers</CardTitle></CardHeader>
+                      <CardContent>
+                        {projectManagers.length === 0 ? (
+                          <p className="text-muted-foreground text-sm">No project managers yet</p>
+                        ) : (
+                          projectManagers.slice(0, 5).map((pm) => (
+                            <div key={pm.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{pm.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{pm.specialization || pm.email}</p>
+                              </div>
+                              <Badge variant={pm.is_available ? 'default' : 'secondary'} className="ml-2 flex-shrink-0">
+                                {pm.is_available ? 'Available' : 'Busy'}
+                              </Badge>
                             </div>
-                            <Badge variant={pm.is_available ? 'default' : 'secondary'}>
-                              {pm.is_available ? 'Available' : 'Busy'}
-                            </Badge>
-                          </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               </TabsContent>
 

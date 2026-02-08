@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.verify-otp]
 verify_jwt = false
+
+[functions.pm-send-otp]
+verify_jwt = false
+
+[functions.pm-verify-otp]
+verify_jwt = false

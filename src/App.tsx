@@ -17,6 +17,8 @@ import GetStarted from "./pages/GetStarted";
 import Dashboard from "./pages/Dashboard";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import PMLogin from "./pages/pm/PMLogin";
+import PMDashboard from "./pages/pm/PMDashboard";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -43,6 +45,8 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/coordinator-admin" element={<AdminLogin />} />
               <Route path="/coordinator-admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/pm/login" element={<PMLogin />} />
+              <Route path="/pm/dashboard" element={<PMDashboard />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/terms-of-service" element={<TermsOfService />} />
               <Route path="/payment-policy" element={<PaymentPolicy />} />
