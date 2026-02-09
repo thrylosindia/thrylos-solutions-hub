@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { User, LogIn, LogOut, Menu, X, LayoutDashboard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -43,6 +43,12 @@ const Navbar = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setShowMobileMenu(false);
+    setShowUserMenu(false);
+  }, [location.pathname]);
+
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
@@ -73,14 +79,14 @@ const Navbar = () => {
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className={`relative flex items-center justify-between gap-4 px-4 sm:px-6 py-3 rounded-2xl w-full max-w-6xl transition-all duration-300 mx-auto z-50
-        ${isScrolled ? 'sticky top-4 bg-[#1A1A1A] shadow-xl backdrop-blur-md' : 'mt-6 bg-[#0F0F0F]/80 shadow-md backdrop-blur-md'}
+      className={`relative flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl w-full max-w-6xl transition-all duration-300 mx-auto z-50
+        ${isScrolled ? 'sticky top-2 sm:top-4 bg-[#1A1A1A] shadow-xl backdrop-blur-md' : 'mt-3 sm:mt-6 bg-[#0F0F0F]/80 shadow-md backdrop-blur-md'}
       `}
     >
       
       {/* Logo */}
       <div
-        className="text-2xl font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text cursor-pointer"
+        className="text-lg sm:text-2xl font-extrabold tracking-wide bg-gradient-to-r from-orange-500 via-pink-500 to-blue-500 text-transparent bg-clip-text cursor-pointer flex-shrink-0"
         style={{ fontFamily: "'Nixmat', sans-serif" }}
         onClick={() => navigate('/')}
       >
@@ -88,7 +94,7 @@ const Navbar = () => {
       </div>
 
       {/* Desktop nav */}
-      <div className="hidden md:flex items-center space-x-8">
+      <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
         {navItems.map((item, index) => {
           const isActive = location.pathname === item.href;
 
@@ -99,7 +105,7 @@ const Navbar = () => {
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className={`relative font-medium transition-all duration-300 group
+              className={`relative font-medium transition-all duration-300 group text-sm lg:text-base
                 ${isActive ? "text-white" : "text-white/80 hover:text-white"}
               `}
             >
@@ -115,13 +121,6 @@ const Navbar = () => {
 
       {/* Desktop actions */}
       <div className="hidden md:flex items-center space-x-3 ml-4">
-      {/*  <motion.button 
-          onClick={() => navigate('/get-started')}
-          className="px-5 py-2 rounded-md bg-[#2196F3] text-white hover:bg-blue-600 transition-colors"
-        >
-          Get Started
-        </motion.button> */}
-
         {user ? (
           <div className="relative">
             <button
@@ -135,7 +134,7 @@ const Navbar = () => {
                   <User className="w-4 h-4 text-white" />
                 )}
               </div>
-              <span className="text-sm font-medium text-foreground max-w-[100px] truncate hidden sm:block">
+              <span className="text-sm font-medium text-foreground max-w-[100px] truncate hidden lg:block">
                 {profile?.full_name || profile?.username || 'PROFILE'}
               </span>
             </button>
@@ -162,7 +161,7 @@ const Navbar = () => {
         ) : (
           <button
             onClick={() => navigate('/auth')}
-            className="px-5 py-2 rounded-md border border-blue-500 text-white bg-transparent hover:bg-blue-500 transition flex items-center gap-2"
+            className="px-4 lg:px-5 py-2 rounded-md border border-blue-500 text-white bg-transparent hover:bg-blue-500 transition flex items-center gap-2 text-sm"
           >
             <LogIn className="w-4 h-4" />
             Login
@@ -170,8 +169,16 @@ const Navbar = () => {
         )}
       </div>
 
-      {/* Mobile */}
+      {/* Mobile actions */}
       <div className="flex items-center gap-2 md:hidden">
+        {user && (
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="p-2 rounded-md border border-border bg-card/60 hover:bg-card transition-colors"
+          >
+            <LayoutDashboard className="w-4 h-4 text-white" />
+          </button>
+        )}
         <button
           onClick={() => setShowMobileMenu(prev => !prev)}
           className="p-2 rounded-md border border-border bg-card/60 hover:bg-card transition-colors"
@@ -181,28 +188,52 @@ const Navbar = () => {
       </div>
 
       {/* Mobile dropdown */}
-      {showMobileMenu && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute left-4 right-4 top-full mt-3 md:hidden z-50"
-        >
-          <div className="rounded-2xl bg-[#0F0F0F]/95 border border-border shadow-xl p-4 space-y-3">
-            {navItems.map(item => (
-              <button
-                key={item.name}
-                onClick={() => {
-                  navigate(item.href);
-                  setShowMobileMenu(false);
-                }}
-                className="w-full text-left px-4 py-2 rounded-lg bg-white/5 text-white hover:bg-white/10 transition"
-              >
-                {item.name}
-              </button>
-            ))}
-          </div>
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {showMobileMenu && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="absolute left-2 right-2 sm:left-4 sm:right-4 top-full mt-2 md:hidden z-50"
+          >
+            <div className="rounded-xl sm:rounded-2xl bg-[#0F0F0F]/95 border border-border shadow-xl p-3 space-y-1.5">
+              {navItems.map(item => (
+                <button
+                  key={item.name}
+                  onClick={() => {
+                    navigate(item.href);
+                    setShowMobileMenu(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition
+                    ${location.pathname === item.href ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white hover:bg-white/10'}`}
+                >
+                  {item.name}
+                </button>
+              ))}
+              
+              <div className="border-t border-border/50 pt-2 mt-2">
+                {user ? (
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition flex items-center gap-2 text-sm"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { navigate('/auth'); setShowMobileMenu(false); }}
+                    className="w-full text-left px-4 py-2.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition flex items-center gap-2 text-sm"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Login / Sign Up
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
