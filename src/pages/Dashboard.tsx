@@ -21,6 +21,18 @@ interface ProjectManager {
   specialization: string | null;
 }
 
+interface PaymentRequest {
+  id: string;
+  service_request_id: string;
+  amount: number;
+  status: string;
+  qr_code_url: string | null;
+  upi_id: string | null;
+  transaction_id: string | null;
+  payment_note: string | null;
+  created_at: string;
+}
+
 interface ServiceRequest {
   id: string;
   title: string;
@@ -40,6 +52,7 @@ interface ServiceRequest {
   assigned_pm_id: string | null;
   pm_assigned_at: string | null;
   project_manager?: ProjectManager | null;
+  payments?: PaymentRequest[];
 }
 
 interface Profile {
