@@ -587,6 +587,42 @@ const AdminDashboard = () => {
     }
   };
 
+  const openPaymentDialog = (request: ServiceRequest) => {
+    setPaymentRequest(request);
+    setPaymentForm({ amount: '', qr_code_url: '', upi_id: '', payment_note: '' });
+    setPaymentDialog(true);
+  };
+
+  const sendPaymentRequest = async () => {
+    if (!paymentRequest || !paymentForm.amount) return;
+    setSendingPayment(true);
+    try {
+      await adminApi('insert', 'payment_requests', {
+        data: {
+          service_request_id: paymentRequest.id,
+          user_id: paymentRequest.user_id,
+          amount: parseFloat(paymentForm.amount),
+          qr_code_url: paymentForm.qr_code_url || null,
+          upi_id: paymentForm.upi_id || null,
+          payment_note: paymentForm.payment_note || null,
+          status: 'pending',
+        }
+      });
+      toast({ title: 'Payment request sent!' });
+      setPaymentDialog(false);
+    } catch (error) {
+      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+    }
+    setSendingPayment(false);
+  };
+
+  const formatBudget = (budget: string | null | undefined) => {
+    if (!budget) return null;
+    const num = parseFloat(budget);
+    if (!isNaN(num)) return `₹${num.toLocaleString('en-IN')}`;
+    return budget;
+  };
+
   const deleteRequest = async (id: string) => {
     if (!confirm('Delete this request?')) return;
     try {
