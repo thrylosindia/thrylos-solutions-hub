@@ -661,6 +661,57 @@ const getStatusIcon = (status: string) => {
       </div>
     )}
 
+    {/* Payment Requests */}
+    {request.payments && request.payments.length > 0 && (
+      <div className="space-y-3">
+        {request.payments.map((payment: PaymentRequest) => (
+          <div key={payment.id} className={`border rounded-lg p-4 ${payment.status === 'paid' ? 'bg-green-500/5 border-green-500/20' : 'bg-orange-500/5 border-orange-500/20'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs uppercase font-semibold flex items-center gap-1">
+                <CreditCard className="w-3.5 h-3.5" />
+                Payment {payment.status === 'paid' ? '✓ Paid' : 'Request'}
+              </p>
+              <span className="text-lg font-bold">₹{Number(payment.amount).toLocaleString('en-IN')}</span>
+            </div>
+            {payment.payment_note && (
+              <p className="text-sm text-muted-foreground mb-2">{payment.payment_note}</p>
+            )}
+            {payment.status === 'pending' && (
+              <div className="space-y-3 mt-3">
+                {payment.qr_code_url && (
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground mb-2 flex items-center justify-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to Pay</p>
+                    <img src={payment.qr_code_url} alt="Payment QR" className="w-48 h-48 mx-auto rounded-lg border" />
+                  </div>
+                )}
+                {payment.upi_id && (
+                  <p className="text-sm text-center">UPI: <span className="font-mono font-medium">{payment.upi_id}</span></p>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter Transaction ID"
+                    value={transactionIds[payment.id] || ''}
+                    onChange={(e) => setTransactionIds(prev => ({ ...prev, [payment.id]: e.target.value }))}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => submitTransactionId(payment.id)}
+                    disabled={submittingPayment === payment.id || !transactionIds[payment.id]?.trim()}
+                  >
+                    {submittingPayment === payment.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit'}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {payment.status === 'paid' && payment.transaction_id && (
+              <p className="text-xs text-muted-foreground mt-1">Txn ID: <span className="font-mono">{payment.transaction_id}</span></p>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+
   </CardContent>
 </Card>
 
