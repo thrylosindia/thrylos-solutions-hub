@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Loader2, LogOut, Briefcase, Clock, CheckCircle, AlertCircle,
-  MessageSquare, ChevronDown, ChevronUp, User2, Mail, Phone, Award
+  MessageSquare, ChevronDown, ChevronUp, User2, Mail, Phone, Award, IndianRupee
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const PM_SESSION_KEY = 'thrylos_pm_session';
 
 interface PMData {
@@ -27,7 +27,7 @@ interface ServiceRequest {
   contact_email: string | null; contact_phone: string | null; user_id: string;
 }
 
-interface Profile { user_id: string; full_name: string | null; email: string | null; }
+interface Profile { full_name: string | null; email: string | null; }
 
 const PMDashboard = () => {
   const [pm, setPm] = useState<PMData | null>(null);
@@ -45,50 +45,77 @@ const PMDashboard = () => {
     if (!session) { navigate('/pm/login'); return; }
     const pmData = JSON.parse(session) as PMData;
     setPm(pmData);
-    fetchProjects(pmData.id);
+    fetchProjects(pmData.email);
   }, [navigate]);
 
-  const fetchProjects = async (pmId: string) => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('service_requests').select('*')
-      .eq('assigned_pm_id', pmId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      toast({ title: 'Error', description: 'Failed to load projects', variant: 'destructive' });
+  const pmApi = async (action: string, data?: Record<string, unknown>, id?: string) => {
+    const pmEmail = pm?.email || JSON.parse(sessionStorage.getItem(PM_SESSION_KEY) || '{}').email;
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/pm-api`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-pm-email': pmEmail,
+      },
+      body: JSON.stringify({ action, data, id }),
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Request failed');
     }
+    return response.json();
+  };
 
-    if (data) {
-      setProjects(data);
-      const userIds = [...new Set(data.map(d => d.user_id))];
-      if (userIds.length > 0) {
-        const { data: profileData } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', userIds);
-        if (profileData) setProfiles(new Map(profileData.map(p => [p.user_id, p])));
+  const fetchProjects = async (pmEmail: string) => {
+    setLoading(true);
+    try {
+      // Use pmEmail to set the header - we need to read from session since pm state might not be set yet
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/pm-api`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-pm-email': pmEmail,
+        },
+        body: JSON.stringify({ action: 'get_projects' }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to load projects');
+      
+      const result = await response.json();
+      setProjects(result.projects || []);
+      
+      if (result.profiles) {
+        const profileMap = new Map(
+          Object.entries(result.profiles).map(([userId, profile]) => [userId, profile as Profile])
+        );
+        setProfiles(profileMap);
       }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to load projects', variant: 'destructive' });
     }
     setLoading(false);
   };
 
   const updateStatus = async (projectId: string, newStatus: string) => {
-    const { error } = await supabase.from('service_requests')
-      .update({ status: newStatus as 'pending' | 'in_progress' | 'completed' | 'cancelled' })
-      .eq('id', projectId);
-    if (error) { toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' }); }
-    else { toast({ title: 'Status updated' }); if (pm) fetchProjects(pm.id); }
+    try {
+      await pmApi('update_status', { status: newStatus }, projectId);
+      toast({ title: 'Status updated' });
+      if (pm) fetchProjects(pm.email);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' });
+    }
   };
 
   const saveNote = async (projectId: string) => {
     if (!noteText.trim()) return;
     setSavingNote(true);
-    const project = projects.find(p => p.id === projectId);
-    const existingNotes = project?.notes || '';
-    const timestamp = new Date().toLocaleString();
-    const updatedNotes = existingNotes ? `${existingNotes}\n\n[${timestamp}] ${noteText}` : `[${timestamp}] ${noteText}`;
-
-    const { error } = await supabase.from('service_requests').update({ notes: updatedNotes }).eq('id', projectId);
-    if (error) { toast({ title: 'Error', description: 'Failed to save note', variant: 'destructive' }); }
-    else { toast({ title: 'Note added' }); setNoteText(''); if (pm) fetchProjects(pm.id); }
+    try {
+      await pmApi('add_note', { note: noteText }, projectId);
+      toast({ title: 'Note added' });
+      setNoteText('');
+      if (pm) fetchProjects(pm.email);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to save note', variant: 'destructive' });
+    }
     setSavingNote(false);
   };
 
@@ -102,6 +129,13 @@ const PMDashboard = () => {
       case 'cancelled': return { color: 'bg-red-500/10 text-red-500 border-red-500/30', icon: AlertCircle };
       default: return { color: 'bg-muted text-muted-foreground', icon: Clock };
     }
+  };
+
+  const formatBudget = (budget: string | null) => {
+    if (!budget) return null;
+    const num = parseFloat(budget);
+    if (!isNaN(num)) return `₹${num.toLocaleString('en-IN')}`;
+    return budget;
   };
 
   if (!pm) return (
@@ -222,6 +256,12 @@ const PMDashboard = () => {
                                 {project.status.replace(/_/g, ' ')}
                               </Badge>
                               <Badge variant="secondary" className="capitalize text-[10px] sm:text-xs">{project.priority}</Badge>
+                              {project.budget_range && (
+                                <Badge variant="outline" className="text-[10px] sm:text-xs">
+                                  <IndianRupee className="w-2.5 h-2.5 mr-0.5" />
+                                  {formatBudget(project.budget_range)}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
@@ -246,7 +286,7 @@ const PMDashboard = () => {
                             {project.budget_range && (
                               <div className="bg-muted/20 p-2 sm:p-3 rounded-lg">
                                 <p className="text-[10px] sm:text-xs text-muted-foreground">Budget</p>
-                                <p className="font-medium capitalize text-xs sm:text-sm">{project.budget_range.replace(/_/g, ' ')}</p>
+                                <p className="font-medium text-xs sm:text-sm">{formatBudget(project.budget_range)}</p>
                               </div>
                             )}
                             {project.timeline && (
@@ -325,7 +365,7 @@ const PMDashboard = () => {
                               className="text-xs sm:text-sm"
                             >
                               {savingNote ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5 mr-1" />}
-                              Add Note
+                              Save Note
                             </Button>
                           </div>
                         </CardContent>
