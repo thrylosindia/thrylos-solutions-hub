@@ -169,7 +169,29 @@ const Dashboard = () => {
     };
   };
 
-  const handleCreateRequest = async (e: React.FormEvent) => {
+  const submitTransactionId = async (paymentId: string) => {
+    const txnId = transactionIds[paymentId];
+    if (!txnId?.trim()) return;
+    setSubmittingPayment(paymentId);
+    const { error } = await supabase
+      .from('payment_requests')
+      .update({ transaction_id: txnId.trim(), status: 'paid', paid_at: new Date().toISOString() })
+      .eq('id', paymentId);
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to submit transaction', variant: 'destructive' });
+    } else {
+      toast({ title: 'Payment submitted!', description: 'Transaction ID recorded successfully' });
+      fetchData();
+    }
+    setSubmittingPayment(null);
+  };
+
+  const formatBudget = (budget: string | null) => {
+    if (!budget) return null;
+    const num = parseFloat(budget);
+    if (!isNaN(num)) return `₹${num.toLocaleString('en-IN')}`;
+    return budget;
+  };
     e.preventDefault();
     if (!user) return;
 
