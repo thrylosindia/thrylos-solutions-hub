@@ -1478,6 +1478,64 @@ const AdminDashboard = () => {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Payment Request Dialog */}
+            <Dialog open={paymentDialog} onOpenChange={setPaymentDialog}>
+              <DialogContent className="glass-card border-border">
+                <DialogHeader><DialogTitle>Send Payment Request</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-4">
+                  {paymentRequest && (
+                    <div className="bg-muted/30 p-3 rounded-lg">
+                      <p className="font-medium text-sm">{paymentRequest.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Client: {paymentRequest.user_name} ({paymentRequest.user_email})</p>
+                    </div>
+                  )}
+                  <div>
+                    <Label>Amount (₹) *</Label>
+                    <Input
+                      type="number"
+                      placeholder="Enter amount"
+                      value={paymentForm.amount}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                      min="1"
+                    />
+                  </div>
+                  <div>
+                    <Label>UPI ID</Label>
+                    <Input
+                      placeholder="e.g., business@upi"
+                      value={paymentForm.upi_id}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, upi_id: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>QR Code Image URL</Label>
+                    <Input
+                      placeholder="https://... (QR code image URL)"
+                      value={paymentForm.qr_code_url}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, qr_code_url: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Payment Note</Label>
+                    <Textarea
+                      rows={2}
+                      placeholder="Optional note for the client..."
+                      value={paymentForm.payment_note}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, payment_note: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    onClick={sendPaymentRequest}
+                    className="w-full bg-primary"
+                    disabled={sendingPayment || !paymentForm.amount}
+                  >
+                    {sendingPayment ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <IndianRupee className="w-4 h-4 mr-2" />}
+                    Send Payment Request
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </main>
