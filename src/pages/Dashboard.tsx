@@ -74,6 +74,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [transactionIds, setTransactionIds] = useState<Record<string, string>>({});
+  const [submittingPayment, setSubmittingPayment] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [newRequest, setNewRequest] = useState({
