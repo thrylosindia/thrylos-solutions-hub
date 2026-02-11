@@ -14,6 +14,7 @@ interface SendOTPRequest {
   email: string;
   fullName?: string;
   isSignup?: boolean;
+  isPasswordReset?: boolean;
 }
 
 serve(async (req) => {
@@ -22,7 +23,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, fullName, isSignup } = (await req.json()) as SendOTPRequest;
+    const { email, fullName, isSignup, isPasswordReset } = (await req.json()) as SendOTPRequest;
 
     if (!email || !email.includes("@")) {
       return new Response(
@@ -33,6 +34,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // For login or password reset, check user exists
     if (!isSignup) {
       const { data: existingUser } = await supabase.auth.admin.listUsers();
       const userExists = existingUser?.users?.some(u => u.email === email);
@@ -40,6 +42,18 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ error: "No account found with this email. Please sign up first." }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // For signup, check user doesn't already exist
+    if (isSignup) {
+      const { data: existingUser } = await supabase.auth.admin.listUsers();
+      const userExists = existingUser?.users?.some(u => u.email === email);
+      if (userExists) {
+        return new Response(
+          JSON.stringify({ error: "An account with this email already exists. Please login instead." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
@@ -63,12 +77,34 @@ serve(async (req) => {
 
     const username = fullName || email.split('@')[0];
 
+    let subject: string;
+    let heading: string;
+    let instruction: string;
+    let subInstruction: string;
+
+    if (isPasswordReset) {
+      subject = "Reset Your THRYLOS Password";
+      heading = `Hello ${username},`;
+      instruction = "You requested to reset your password at THRYLOS. Use the code below to verify your identity.";
+      subInstruction = "If you didn't request a password reset, you can safely ignore this email.";
+    } else if (isSignup) {
+      subject = "Welcome to THRYLOS - Verify Your Email";
+      heading = `Welcome ${username}!`;
+      instruction = "Use the code below to verify your email and create your account.";
+      subInstruction = "If you didn't request to create an account, you can safely ignore this email.";
+    } else {
+      subject = "Your THRYLOS Login Code";
+      heading = `Welcome back ${username}!`;
+      instruction = "If you requested to log in to your THRYLOS ID, use the code below.";
+      subInstruction = "If you didn't request to log in to your THRYLOS ID, you can safely ignore this email.";
+    }
+
     const emailHtml = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>THRYLOS OTP</title>
+<title>THRYLOS</title>
 </head>
 <body style="margin:0; padding:0; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff">
@@ -82,7 +118,7 @@ serve(async (req) => {
 </tr>
 <tr>
 <td align="center" style="padding:20px 20px 10px 20px;">
-<h1 style="font-size:32px; margin:0; font-weight:800;">${isSignup ? `Welcome ${username}!` : `Welcome back ${username}!`}</h1>
+<h1 style="font-size:32px; margin:0; font-weight:800;">${heading}</h1>
 </td>
 </tr>
 <tr>
@@ -91,7 +127,7 @@ serve(async (req) => {
 <tr>
 <td style="padding:20px;">
 <table width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="font-size:16px;color:#555;padding-bottom:8px;">Logging in to</td></tr>
+<tr><td style="font-size:16px;color:#555;padding-bottom:8px;">${isPasswordReset ? 'Resetting password for' : 'Logging in to'}</td></tr>
 <tr><td>
 <table width="100%"><tr>
 <td style="font-size:16px;font-weight:bold;">THRYLOS</td>
@@ -113,7 +149,7 @@ serve(async (req) => {
 </tr>
 <tr>
 <td align="center" style="padding:30px 40px 10px 40px;font-size:16px;color:#444;">
-If you requested to log in to your THRYLOS ID, use the code below.
+${instruction}
 </td>
 </tr>
 <tr>
@@ -125,7 +161,7 @@ ${otp}
 </tr>
 <tr>
 <td align="center" style="padding:0 40px 40px 40px;font-size:14px;color:#666;">
-If you didn't request to log in to your THRYLOS ID, you can safely ignore this email.
+${subInstruction}
 </td>
 </tr>
 <tr>
@@ -152,7 +188,7 @@ If you didn't request to log in to your THRYLOS ID, you can safely ignore this e
       body: JSON.stringify({
         sender: { name: "THRYLOS", email: "noreply@thrylosindia.in" },
         to: [{ email }],
-        subject: isSignup ? "Welcome to THRYLOS - Verify Your Email" : "Your THRYLOS Login Code",
+        subject,
         htmlContent: emailHtml,
       }),
     });
@@ -163,8 +199,7 @@ If you didn't request to log in to your THRYLOS ID, you can safely ignore this e
       throw new Error("Failed to send email");
     }
 
-    const emailResult = await emailResponse.json();
-    console.log("OTP email sent via Brevo:", emailResult);
+    console.log("OTP email sent via Brevo to:", email);
 
     return new Response(
       JSON.stringify({ success: true, message: "OTP sent successfully" }),
