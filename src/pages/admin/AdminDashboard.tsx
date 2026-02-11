@@ -1534,14 +1534,6 @@ const AdminDashboard = () => {
                     />
                   </div>
                   <div>
-                    <Label>QR Code Image URL</Label>
-                    <Input
-                      placeholder="https://... (QR code image URL)"
-                      value={paymentForm.qr_code_url}
-                      onChange={(e) => setPaymentForm({ ...paymentForm, qr_code_url: e.target.value })}
-                    />
-                  </div>
-                  <div>
                     <Label>Payment Note</Label>
                     <Textarea
                       rows={2}
