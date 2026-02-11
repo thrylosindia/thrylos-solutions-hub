@@ -242,6 +242,8 @@ const Dashboard = () => {
       setChangingPassword(false);
     }
   };
+
+  const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
