@@ -13,6 +13,7 @@ interface VerifyOTPRequest {
   email: string;
   otp: string;
   fullName?: string;
+  password?: string;
   isSignup?: boolean;
 }
 
@@ -22,7 +23,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, otp, fullName, isSignup } = (await req.json()) as VerifyOTPRequest;
+    const { email, otp, fullName, password, isSignup } = (await req.json()) as VerifyOTPRequest;
 
     if (!email || !otp) {
       return new Response(
@@ -59,11 +60,17 @@ serve(async (req) => {
       .eq("id", otpData.id);
 
     if (isSignup) {
-      // Create new user with random password (since we're using OTP)
-      const tempPassword = crypto.randomUUID();
+      if (!password || password.length < 6) {
+        return new Response(
+          JSON.stringify({ error: "Password must be at least 6 characters" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Create new user with password
       const { data: signUpData, error: signUpError } = await supabase.auth.admin.createUser({
         email,
-        password: tempPassword,
+        password,
         email_confirm: true,
         user_metadata: { full_name: fullName || "" },
       });
@@ -78,38 +85,18 @@ serve(async (req) => {
         throw signUpError;
       }
 
-      // Create profile
-      if (signUpData.user) {
-        await supabase.from("profiles").insert({
-          user_id: signUpData.user.id,
-          email: email,
-          full_name: fullName || "",
-        });
-      }
-
-      // Generate magic link for immediate login
-      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-        type: "magiclink",
-        email: email,
-      });
-
-      if (linkError) throw linkError;
-
-      // Extract tokens from the hashed_token
-      const hashedToken = linkData.properties?.hashed_token;
-
       return new Response(
         JSON.stringify({
           success: true,
-          message: "Account created successfully",
+          message: "Account created successfully. You can now login with your password.",
           userId: signUpData.user?.id,
           email: email,
-          hashedToken: hashedToken,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
-      // Login flow - generate magic link
+      // This shouldn't be called for login anymore (password-based now)
+      // But keep for backward compatibility - generate magic link
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type: "magiclink",
         email: email,

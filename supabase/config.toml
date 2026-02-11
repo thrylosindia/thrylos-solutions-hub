@@ -17,3 +17,12 @@ verify_jwt = false
 
 [functions.pm-api]
 verify_jwt = false
+
+[functions.notify-pm-assignment]
+verify_jwt = false
+
+[functions.reset-password]
+verify_jwt = false
+
+[functions.change-password]
+verify_jwt = false
