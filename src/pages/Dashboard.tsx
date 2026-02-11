@@ -76,6 +76,13 @@ const Dashboard = () => {
   const [submitting, setSubmitting] = useState(false);
   const [transactionIds, setTransactionIds] = useState<Record<string, string>>({});
   const [submittingPayment, setSubmittingPayment] = useState<string | null>(null);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
   const { toast } = useToast();
 
   const [newRequest, setNewRequest] = useState({
