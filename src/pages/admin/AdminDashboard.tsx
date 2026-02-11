@@ -215,7 +215,29 @@ const AdminDashboard = () => {
       });
       // Update PM availability
       await adminApi('update', 'project_managers', { data: { is_available: false }, id: pmId });
-      toast({ title: 'Project Manager assigned' });
+      
+      // Send notification email to PM
+      const pm = projectManagers.find(p => p.id === pmId);
+      const request = requests.find(r => r.id === requestId);
+      if (pm && request) {
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/notify-pm-assignment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              managerName: pm.name,
+              managerEmail: pm.email,
+              clientName: request.user_name || 'N/A',
+              projectName: request.title,
+              phone: request.contact_phone || 'N/A',
+            }),
+          });
+        } catch (emailError) {
+          console.error('Failed to send PM notification email:', emailError);
+        }
+      }
+      
+      toast({ title: 'Project Manager assigned & notified' });
       fetchRequests();
       fetchProjectManagers();
     } catch (error) {
