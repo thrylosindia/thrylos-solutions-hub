@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Link } from 'react-router-dom';
-import { Plus, Clock, CheckCircle, AlertCircle, Loader2, FileText, LogOut, IndianRupee, QrCode, CreditCard } from 'lucide-react';
+import { Plus, Clock, CheckCircle, AlertCircle, Loader2, FileText, LogOut, IndianRupee, QrCode, CreditCard, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
