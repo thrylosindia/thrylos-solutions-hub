@@ -617,6 +617,10 @@ const AdminDashboard = () => {
 
   const sendPaymentRequest = async () => {
     if (!paymentRequest || !paymentForm.amount) return;
+    if (!paymentForm.upi_id) {
+      toast({ title: 'Error', description: 'UPI ID is required to generate QR code', variant: 'destructive' });
+      return;
+    }
     setSendingPayment(true);
     try {
       await adminApi('insert', 'payment_requests', {
@@ -624,8 +628,7 @@ const AdminDashboard = () => {
           service_request_id: paymentRequest.id,
           user_id: paymentRequest.user_id,
           amount: parseFloat(paymentForm.amount),
-          qr_code_url: paymentForm.qr_code_url || null,
-          upi_id: paymentForm.upi_id || null,
+          upi_id: paymentForm.upi_id,
           payment_note: paymentForm.payment_note || null,
           status: 'pending',
         }
