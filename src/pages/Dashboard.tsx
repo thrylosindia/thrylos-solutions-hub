@@ -734,14 +734,12 @@ const getStatusIcon = (status: string) => {
             )}
             {payment.status === 'pending' && (
               <div className="space-y-3 mt-3">
-                {payment.qr_code_url && (
+                {payment.upi_id && (
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground mb-2 flex items-center justify-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to Pay</p>
-                    <img src={payment.qr_code_url} alt="Payment QR" className="w-48 h-48 mx-auto rounded-lg border" />
+                    <img src={generateUpiQrUrl(payment.upi_id, Number(payment.amount), payment.payment_note || undefined)} alt="Payment QR" className="w-48 h-48 mx-auto rounded-lg border" />
+                    <p className="text-sm text-center mt-2">UPI: <span className="font-mono font-medium">{payment.upi_id}</span></p>
                   </div>
-                )}
-                {payment.upi_id && (
-                  <p className="text-sm text-center">UPI: <span className="font-mono font-medium">{payment.upi_id}</span></p>
                 )}
                 <div className="flex gap-2">
                   <Input
