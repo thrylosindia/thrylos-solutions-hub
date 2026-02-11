@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Loader2, ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react';
+import { Mail, Loader2, ArrowLeft, ShieldCheck, Sparkles, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
 
@@ -157,15 +157,18 @@ const PMLogin = () => {
                 </div>
               )}
 
-              <div className="flex justify-center">
+              <div className="flex justify-center py-2">
                 <InputOTP maxLength={6} value={otp} onChange={setOtp}>
                   <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
+                    <InputOTPSlot index={0} className="w-12 h-14 text-lg border-2 rounded-lg" />
+                    <InputOTPSlot index={1} className="w-12 h-14 text-lg border-2 rounded-lg" />
+                    <InputOTPSlot index={2} className="w-12 h-14 text-lg border-2 rounded-lg" />
+                  </InputOTPGroup>
+                  <InputOTPSeparator />
+                  <InputOTPGroup>
+                    <InputOTPSlot index={3} className="w-12 h-14 text-lg border-2 rounded-lg" />
+                    <InputOTPSlot index={4} className="w-12 h-14 text-lg border-2 rounded-lg" />
+                    <InputOTPSlot index={5} className="w-12 h-14 text-lg border-2 rounded-lg" />
                   </InputOTPGroup>
                 </InputOTP>
               </div>
