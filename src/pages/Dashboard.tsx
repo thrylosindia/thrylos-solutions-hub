@@ -356,10 +356,14 @@ const getStatusIcon = (status: string) => {
       </div>
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <div className="text-sm text-muted-foreground hidden sm:block">
               Welcome, <span className="text-foreground">{profile?.full_name || user.email}</span>
             </div>
+            <Button variant="outline" size="sm" onClick={() => setChangePasswordOpen(true)}>
+              <KeyRound className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Change Password</span>
+            </Button>
             <Button variant="ghost" size="sm" onClick={signOut}>
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
