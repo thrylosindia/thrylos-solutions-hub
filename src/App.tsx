@@ -15,6 +15,7 @@ import Contact from "./pages/Contact";
 import Auth from "./pages/Auth";
 import GetStarted from "./pages/GetStarted";
 import Dashboard from "./pages/Dashboard";
+import Settings from "./pages/Settings";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import PMLogin from "./pages/pm/PMLogin";
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/get-started" element={<GetStarted />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/coordinator-admin" element={<AdminLogin />} />
               <Route path="/coordinator-admin/dashboard" element={<AdminDashboard />} />
               <Route path="/pm/login" element={<PMLogin />} />

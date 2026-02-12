@@ -139,6 +139,7 @@ const AdminDashboard = () => {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [projectManagers, setProjectManagers] = useState<ProjectManager[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
 
   // Dialog states
   const [serviceDialog, setServiceDialog] = useState(false);
@@ -192,6 +193,7 @@ const AdminDashboard = () => {
         fetchMessages(),
         fetchTeamMembers(),
         fetchProjectManagers(),
+        fetchPayments(),
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -207,14 +209,37 @@ const AdminDashboard = () => {
     setProjectManagers(data || []);
   };
 
+  const fetchPayments = async () => {
+    try {
+      const data = await adminApi('select', 'payment_requests', {
+        filters: { order: { column: 'created_at', ascending: false } }
+      });
+      // Enrich with profiles and request titles
+      const profiles = await adminApi('select', 'profiles', {
+        data: { select: 'user_id, full_name, email' }
+      });
+      const profileMap = new Map(profiles?.map((p: Profile) => [p.user_id, p]) || []);
+      const requestMap = new Map(requests.map((r: ServiceRequest) => [r.id, r]));
+      
+      const enrichedPayments = (data || []).map((p: any) => ({
+        ...p,
+        user_name: (profileMap.get(p.user_id) as Profile | undefined)?.full_name || 'Unknown',
+        user_email: (profileMap.get(p.user_id) as Profile | undefined)?.email || '',
+        request_title: (requestMap.get(p.service_request_id) as ServiceRequest | undefined)?.title || 'Unknown',
+        request_budget: (requestMap.get(p.service_request_id) as ServiceRequest | undefined)?.budget_range || null,
+      }));
+      setPayments(enrichedPayments);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+    }
+  };
+
   const assignPM = async (requestId: string, pmId: string) => {
     try {
       await adminApi('update', 'service_requests', { 
         data: { assigned_pm_id: pmId, pm_assigned_at: new Date().toISOString() }, 
         id: requestId 
       });
-      // Update PM availability
-      await adminApi('update', 'project_managers', { data: { is_available: false }, id: pmId });
       
       // Send notification email to PM
       const pm = projectManagers.find(p => p.id === pmId);
@@ -810,6 +835,7 @@ const AdminDashboard = () => {
               <TabsList className="mb-6 flex flex-wrap gap-1 h-auto">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="requests">Requests ({requests.length})</TabsTrigger>
+                <TabsTrigger value="payments">Payments</TabsTrigger>
                 <TabsTrigger value="project-managers">PMs ({projectManagers.length})</TabsTrigger>
                 <TabsTrigger value="services">Services</TabsTrigger>
                 <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
@@ -1015,8 +1041,7 @@ const AdminDashboard = () => {
                               {req.budget_range && (
                                 <div className="bg-muted/40 p-3 rounded-lg space-y-1">
                                   <p className="text-xs text-muted-foreground">Budget</p>
-                                  <p className="font-medium flex items-center gap-1">
-                                    <IndianRupee className="w-3.5 h-3.5" />
+                                  <p className="font-medium">
                                     {formatBudget(req.budget_range)}
                                   </p>
                                 </div>
@@ -1068,6 +1093,107 @@ const AdminDashboard = () => {
                 </div>
               </TabsContent>
 
+              {/* Payments Tab */}
+              <TabsContent value="payments">
+                <div className="space-y-6">
+                  {/* Payment Stats */}
+                  {(() => {
+                    const totalBudget = requests.reduce((sum, r) => {
+                      const b = parseFloat(r.budget_range || '0');
+                      return sum + (isNaN(b) ? 0 : b);
+                    }, 0);
+                    const totalReceived = payments.filter((p: any) => p.status === 'paid').reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+                    const totalPending = payments.filter((p: any) => p.status === 'pending').reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+                    const totalRequested = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+                    const remaining = totalBudget - totalRequested;
+
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <Card className="glass-card">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-xs text-muted-foreground">Total Budget (All Projects)</p>
+                            <p className="text-xl font-bold text-foreground">₹{totalBudget.toLocaleString('en-IN')}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="glass-card">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-xs text-muted-foreground">Amount Received</p>
+                            <p className="text-xl font-bold text-green-500">₹{totalReceived.toLocaleString('en-IN')}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="glass-card">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-xs text-muted-foreground">Amount Pending</p>
+                            <p className="text-xl font-bold text-yellow-500">₹{totalPending.toLocaleString('en-IN')}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="glass-card">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-xs text-muted-foreground">Total Requested</p>
+                            <p className="text-xl font-bold text-blue-500">₹{totalRequested.toLocaleString('en-IN')}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="glass-card">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-xs text-muted-foreground">Budget Remaining</p>
+                            <p className="text-xl font-bold text-purple-500">₹{remaining.toLocaleString('en-IN')}</p>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Payment List */}
+                  {payments.length === 0 ? (
+                    <Card className="glass-card">
+                      <CardContent className="py-12 text-center">
+                        <CreditCard className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No payment requests yet</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="space-y-3">
+                      {payments.map((payment: any) => (
+                        <Card key={payment.id} className={`glass-card ${payment.status === 'paid' ? 'border-green-500/30' : 'border-yellow-500/30'}`}>
+                          <CardContent className="p-5">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge className={payment.status === 'paid' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}>
+                                    {payment.status === 'paid' ? '✓ Paid' : '⏳ Pending'}
+                                  </Badge>
+                                  <span className="text-lg font-bold">₹{Number(payment.amount).toLocaleString('en-IN')}</span>
+                                </div>
+                                <p className="text-sm"><span className="text-muted-foreground">Client:</span> <span className="font-medium">{payment.user_name}</span> <span className="text-muted-foreground">({payment.user_email})</span></p>
+                                <p className="text-sm"><span className="text-muted-foreground">Project:</span> {payment.request_title}</p>
+                                {payment.request_budget && (
+                                  <p className="text-sm"><span className="text-muted-foreground">Project Budget:</span> {formatBudget(payment.request_budget)}</p>
+                                )}
+                                {payment.payment_note && (
+                                  <p className="text-sm"><span className="text-muted-foreground">Note:</span> {payment.payment_note}</p>
+                                )}
+                                {payment.upi_id && (
+                                  <p className="text-sm"><span className="text-muted-foreground">UPI:</span> <span className="font-mono">{payment.upi_id}</span></p>
+                                )}
+                              </div>
+                              <div className="text-right space-y-1">
+                                <p className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleDateString()}</p>
+                                {payment.status === 'paid' && payment.transaction_id && (
+                                  <p className="text-xs"><span className="text-muted-foreground">Txn:</span> <span className="font-mono">{payment.transaction_id}</span></p>
+                                )}
+                                {payment.paid_at && (
+                                  <p className="text-xs text-green-500">Paid on {new Date(payment.paid_at).toLocaleDateString()}</p>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
               {/* Project Managers Tab */}
               <TabsContent value="project-managers">
                 <div className="flex justify-end mb-4">
@@ -1090,7 +1216,7 @@ const AdminDashboard = () => {
                           <Input 
                             value={pmForm.name} 
                             onChange={(e) => setPmForm({ ...pmForm, name: e.target.value })} 
-                            placeholder="John Doe"
+                            placeholder="Your Name"
                           />
                         </div>
                         <div>

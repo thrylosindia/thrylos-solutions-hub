@@ -143,7 +143,7 @@ const GetStarted = () => {
                     <div>
                       <label className="text-sm font-medium mb-2 block">Full Name *</label>
                       <Input
-                        placeholder="John Doe"
+                        placeholder="Your Name"
                         value={formData.fullName}
                         onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                         required

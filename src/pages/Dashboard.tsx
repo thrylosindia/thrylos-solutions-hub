@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
-import { Plus, Clock, CheckCircle, AlertCircle, Loader2, FileText, LogOut, IndianRupee, QrCode, CreditCard, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Plus, Clock, CheckCircle, AlertCircle, Loader2, FileText, LogOut, IndianRupee, QrCode, CreditCard, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -59,6 +59,7 @@ interface Profile {
   full_name: string | null;
   email: string | null;
   company: string | null;
+  avatar_url: string | null;
 }
 
 interface Service {
@@ -68,6 +69,7 @@ interface Service {
 
 const Dashboard = () => {
   const { user, loading: authLoading, signOut } = useAuth();
+  const navigate = useNavigate();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -76,12 +78,6 @@ const Dashboard = () => {
   const [submitting, setSubmitting] = useState(false);
   const [transactionIds, setTransactionIds] = useState<Record<string, string>>({});
   const [submittingPayment, setSubmittingPayment] = useState<string | null>(null);
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [showPwd, setShowPwd] = useState(false);
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
   const { toast } = useToast();
 
@@ -116,7 +112,7 @@ const Dashboard = () => {
         .order('created_at', { ascending: false }),
       supabase
         .from('profiles')
-        .select('full_name, email, company')
+        .select('full_name, email, company, avatar_url')
         .eq('user_id', user.id)
         .maybeSingle(),
       supabase
@@ -205,45 +201,8 @@ const Dashboard = () => {
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUrl)}`;
   };
 
-  const handleChangePassword = async () => {
-    if (!newPwd || newPwd.length < 6) {
-      toast({ title: 'Error', description: 'Password must be at least 6 characters', variant: 'destructive' });
-      return;
-    }
-    if (newPwd !== confirmPwd) {
-      toast({ title: 'Error', description: 'Passwords do not match', variant: 'destructive' });
-      return;
-    }
 
-    setChangingPassword(true);
-    try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) throw new Error('Not authenticated');
 
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/change-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ newPassword: newPwd }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to change password');
-      toast({ title: 'Password Changed!', description: 'Your password has been updated successfully' });
-      setChangePasswordOpen(false);
-      setNewPwd('');
-      setConfirmPwd('');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to change password';
-      toast({ title: 'Error', description: message, variant: 'destructive' });
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
-  const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
@@ -360,9 +319,9 @@ const getStatusIcon = (status: string) => {
             <div className="text-sm text-muted-foreground hidden sm:block">
               Welcome, <span className="text-foreground">{profile?.full_name || user.email}</span>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setChangePasswordOpen(true)}>
-              <KeyRound className="w-4 h-4 mr-1 sm:mr-2" />
-              <span className="hidden sm:inline">Change Password</span>
+            <Button variant="outline" size="sm" onClick={() => navigate('/settings')}>
+              <Settings className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Settings</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={signOut}>
               <LogOut className="w-4 h-4 mr-2" />
@@ -497,28 +456,6 @@ const getStatusIcon = (status: string) => {
                         <SelectItem value="medium">Medium</SelectItem>
                         <SelectItem value="high">High</SelectItem>
                         <SelectItem value="urgent">Urgent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label>Preferred Color Theme</Label>
-                    <Select
-                      value={newRequest.color_theme}
-                      onValueChange={(value) => setNewRequest({ ...newRequest, color_theme: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select color theme" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dark">Dark Theme</SelectItem>
-                        <SelectItem value="light">Light Theme</SelectItem>
-                        <SelectItem value="blue">Blue Accent</SelectItem>
-                        <SelectItem value="green">Green Accent</SelectItem>
-                        <SelectItem value="purple">Purple Accent</SelectItem>
-                        <SelectItem value="orange">Orange Accent</SelectItem>
-                        <SelectItem value="red">Red Accent</SelectItem>
-                        <SelectItem value="custom">Custom (specify in description)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -682,7 +619,7 @@ const getStatusIcon = (status: string) => {
       )}
       {request.budget_range && (
         <span className="px-2 py-1 rounded bg-muted/50 border border-border/40 flex items-center gap-1">
-          <IndianRupee className="w-3 h-3" /> Budget: {formatBudget(request.budget_range)}
+          Budget: {formatBudget(request.budget_range)}
         </span>
       )}
       {request.timeline && (
@@ -773,50 +710,6 @@ const getStatusIcon = (status: string) => {
           </div>
         )}
       </main>
-
-      {/* Change Password Dialog */}
-      <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
-        <DialogContent className="glass-card border-border max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><KeyRound className="w-5 h-5" /> Change Password</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label>New Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type={showPwd ? 'text' : 'password'}
-                  placeholder="Min 6 characters"
-                  className="pl-10 pr-10"
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                />
-                <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <Label>Confirm Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="password"
-                  placeholder="Confirm password"
-                  className="pl-10"
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleChangePassword()}
-                />
-              </div>
-            </div>
-            <Button onClick={handleChangePassword} className="w-full" disabled={changingPassword}>
-              {changingPassword ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Changing...</> : 'Change Password'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

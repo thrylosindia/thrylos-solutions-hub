@@ -264,7 +264,7 @@ const Auth = () => {
                         <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Full Name</label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <Input type="text" placeholder="John Doe" className="pl-10" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                          <Input type="text" placeholder="Your Name" className="pl-10" value={fullName} onChange={(e) => setFullName(e.target.value)} />
                         </div>
                       </div>
                       <div>
