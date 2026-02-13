@@ -976,22 +976,25 @@ const AdminDashboard = () => {
 
                               {/* Actions */}
                               <div className="flex flex-wrap gap-2">
-                                {!assignedPM && (
-                                  <Select onValueChange={(value) => assignPM(req.id, value)}>
-                                    <SelectTrigger className="w-[160px]">
-                                      <SelectValue placeholder="Assign PM" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {projectManagers.filter(pm => pm.is_available).length === 0 ? (
-                                        <SelectItem value="none" disabled>No PMs available</SelectItem>
-                                      ) : (
-                                        projectManagers.filter(pm => pm.is_available).map((pm) => (
-                                          <SelectItem key={pm.id} value={pm.id}>{pm.name}</SelectItem>
-                                        ))
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                )}
+                                <Select onValueChange={(value) => assignPM(req.id, value)}>
+                                  <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder={assignedPM ? "Reassign PM" : "Assign PM"} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {projectManagers.length === 0 ? (
+                                      <SelectItem value="none" disabled>No PMs added</SelectItem>
+                                    ) : (
+                                      projectManagers.map((pm) => {
+                                        const activeCount = requests.filter(r => r.assigned_pm_id === pm.id && r.status !== 'completed' && r.status !== 'cancelled').length;
+                                        return (
+                                          <SelectItem key={pm.id} value={pm.id}>
+                                            {pm.name} ({activeCount} active)
+                                          </SelectItem>
+                                        );
+                                      })
+                                    )}
+                                  </SelectContent>
+                                </Select>
 
                                 <Select onValueChange={(value) => updateRequestStatus(req.id, value)}>
                                   <SelectTrigger className="w-[160px]">
@@ -1098,35 +1101,12 @@ const AdminDashboard = () => {
                 <div className="space-y-6">
                   {/* Payment Stats */}
                   {(() => {
-                    const totalBudget = requests.reduce((sum, r) => {
-                      const b = parseFloat(r.budget_range || '0');
-                      return sum + (isNaN(b) ? 0 : b);
-                    }, 0);
+                    const totalRequested = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
                     const totalReceived = payments.filter((p: any) => p.status === 'paid').reduce((sum: number, p: any) => sum + Number(p.amount), 0);
                     const totalPending = payments.filter((p: any) => p.status === 'pending').reduce((sum: number, p: any) => sum + Number(p.amount), 0);
-                    const totalRequested = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
-                    const remaining = totalBudget - totalRequested;
 
                     return (
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <Card className="glass-card">
-                          <CardContent className="p-4 text-center">
-                            <p className="text-xs text-muted-foreground">Total Budget (All Projects)</p>
-                            <p className="text-xl font-bold text-foreground">₹{totalBudget.toLocaleString('en-IN')}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="glass-card">
-                          <CardContent className="p-4 text-center">
-                            <p className="text-xs text-muted-foreground">Amount Received</p>
-                            <p className="text-xl font-bold text-green-500">₹{totalReceived.toLocaleString('en-IN')}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="glass-card">
-                          <CardContent className="p-4 text-center">
-                            <p className="text-xs text-muted-foreground">Amount Pending</p>
-                            <p className="text-xl font-bold text-yellow-500">₹{totalPending.toLocaleString('en-IN')}</p>
-                          </CardContent>
-                        </Card>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <Card className="glass-card">
                           <CardContent className="p-4 text-center">
                             <p className="text-xs text-muted-foreground">Total Requested</p>
@@ -1135,8 +1115,14 @@ const AdminDashboard = () => {
                         </Card>
                         <Card className="glass-card">
                           <CardContent className="p-4 text-center">
-                            <p className="text-xs text-muted-foreground">Budget Remaining</p>
-                            <p className="text-xl font-bold text-purple-500">₹{remaining.toLocaleString('en-IN')}</p>
+                            <p className="text-xs text-muted-foreground">Total Received</p>
+                            <p className="text-xl font-bold text-green-500">₹{totalReceived.toLocaleString('en-IN')}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="glass-card">
+                          <CardContent className="p-4 text-center">
+                            <p className="text-xs text-muted-foreground">Total Pending</p>
+                            <p className="text-xl font-bold text-yellow-500">₹{totalPending.toLocaleString('en-IN')}</p>
                           </CardContent>
                         </Card>
                       </div>
@@ -1176,7 +1162,7 @@ const AdminDashboard = () => {
                                   <p className="text-sm"><span className="text-muted-foreground">UPI:</span> <span className="font-mono">{payment.upi_id}</span></p>
                                 )}
                               </div>
-                              <div className="text-right space-y-1">
+                              <div className="text-right space-y-2">
                                 <p className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleDateString()}</p>
                                 {payment.status === 'paid' && payment.transaction_id && (
                                   <p className="text-xs"><span className="text-muted-foreground">Txn:</span> <span className="font-mono">{payment.transaction_id}</span></p>
@@ -1184,6 +1170,29 @@ const AdminDashboard = () => {
                                 {payment.paid_at && (
                                   <p className="text-xs text-green-500">Paid on {new Date(payment.paid_at).toLocaleDateString()}</p>
                                 )}
+                                <Button
+                                  size="sm"
+                                  variant={payment.status === 'paid' ? 'outline' : 'default'}
+                                  className={payment.status === 'paid' ? 'border-red-500/30 text-red-500 hover:bg-red-500/10' : 'bg-green-600 hover:bg-green-700'}
+                                  onClick={async () => {
+                                    const newStatus = payment.status === 'paid' ? 'pending' : 'paid';
+                                    try {
+                                      await adminApi('update', 'payment_requests', {
+                                        data: { 
+                                          status: newStatus, 
+                                          paid_at: newStatus === 'paid' ? new Date().toISOString() : null 
+                                        },
+                                        id: payment.id
+                                      });
+                                      toast({ title: newStatus === 'paid' ? 'Marked as Received' : 'Marked as Pending' });
+                                      fetchPayments();
+                                    } catch (error) {
+                                      toast({ title: 'Error', description: (error as Error).message, variant: 'destructive' });
+                                    }
+                                  }}
+                                >
+                                  {payment.status === 'paid' ? 'Mark Not Received' : 'Mark Received'}
+                                </Button>
                               </div>
                             </div>
                           </CardContent>
